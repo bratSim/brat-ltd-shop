@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172333">
+  <title>Brat Ltd. – KantoBay Marketplace</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#"><span class="brand-mark">B</span><span>BRAT <b>LTD.</b><small>KANTOBAY MARKETPLACE</small></span></a>
+    <div class="search-wrap"><span>⌕</span><input id="search" type="search" placeholder="Suche nach Blöcken, Items, Rüstung …"></div>
+    <button class="cart-button" id="open-cart">Warenkorb <span id="cart-count">0</span></button>
+  </header>
+  <nav class="nav">
+    <a href="#shop" data-category="Alle">Alle Produkte</a>
+    <a href="#shop" data-category="Blöcke">Blöcke</a>
+    <a href="#shop" data-category="Items">Items</a>
+    <a href="#shop" data-category="Rüstung & Waffen">Rüstung & Waffen</a>
+    <a href="#shop" data-category="Verzauberungen">Verzauberungen</a>
+    <a href="#shop" data-category="Dienstleistungen">Dienstleistungen</a>
+  </nav>
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">DER MARKTPLATZ VON KANTOBAY</span>
+        <h1>Alles für dein<br><em>nächstes Projekt.</em></h1>
+        <p>Blöcke, Ausrüstung und Dienstleistungen – direkt von Brat Ltd. für die KantoBay-Community.</p>
+        <a class="primary-link" href="#shop">Shop entdecken <span>→</span></a>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="cube cube-one">◆</div><div class="cube cube-two">▧</div><div class="cube cube-three">✦</div>
+        <div class="hero-stamp">K$<small>KANTOBAY<br>TRADE</small></div>
+      </div>
+    </section>
+    <section class="trust-row">
+      <div><b>100 %</b><span>KantoBay-Items</span></div>
+      <div><b>Faire Preise</b><span>Transparente Mengenrabatte</span></div>
+      <div><b>Direkt</b><span>Bestellung bei Brat Ltd.</span></div>
+    </section>
+    <section class="shop-section" id="shop">
+      <div class="section-heading"><div><span class="eyebrow">UNSER SORTIMENT</span><h2>Produkte entdecken</h2></div><span id="result-count" class="muted"></span></div>
+      <div class="chips" id="chips">
+        <button class="chip active" data-category="Alle">Alle</button>
+        <button class="chip" data-category="Blöcke">Blöcke</button>
+        <button class="chip" data-category="Items">Items</button>
+        <button class="chip" data-category="Rüstung & Waffen">Rüstung & Waffen</button>
+        <button class="chip" data-category="Verzauberungen">Verzauberungen</button>
+        <button class="chip" data-category="Dienstleistungen">Dienstleistungen</button>
+      </div>
+      <div class="product-grid" id="products"></div>
+    </section>
+    <section class="notice"><span>ⓘ</span><p><b>So funktioniert's:</b> Du legst Produkte in den Warenkorb und sendest eine Bestellanfrage. Die Bezahlung und Übergabe erfolgen zunächst ingame in KantoBay mit <b>KB$</b>.</p></section>
+  </main>
+  <footer><span class="brand-footer">BRAT LTD.</span><span>Ein unabhängiger Shop für KantoBay · Alle Preise in KB$</span></footer>
+
+  <div class="overlay" id="overlay"></div>
+  <aside class="cart-panel" id="cart-panel" aria-label="Warenkorb">
+    <div class="cart-head"><div><span class="eyebrow">DEINE AUSWAHL</span><h2>Warenkorb</h2></div><button class="icon-button" id="close-cart" aria-label="Schließen">×</button></div>
+    <div id="cart-items" class="cart-items"><p class="empty">Dein Warenkorb ist noch leer.</p></div>
+    <div class="cart-bottom"><div class="total-line"><span>Zwischensumme</span><b id="cart-total">0 KB$</b></div><p class="muted small">Rabatte werden automatisch anhand der Mengenstaffeln berücksichtigt.</p><button class="checkout" id="checkout">Bestellanfrage erstellen</button></div>
+  </aside>
+
+  <div class="modal-backdrop" id="order-modal">
+    <div class="modal">
+      <button class="icon-button modal-close" id="close-modal">×</button>
+      <span class="eyebrow">FAST GESCHAFFT</span><h2>Bestellanfrage</h2>
+      <p class="muted">Gib deinen Minecraft-Namen an. Es wird noch keine Zahlung ausgelöst.</p>
+      <label>Minecraft-Spielername<input id="player-name" maxlength="32" placeholder="Dein Ingame-Name"></label>
+      <label>Hinweis (optional)<textarea id="order-note" rows="3" placeholder="Zum Beispiel: Übergabe am Marktplatz"></textarea></label>
+      <button class="checkout" id="send-order">Anfrage vorbereiten</button>
+      <p class="small muted" id="order-status"></p>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
