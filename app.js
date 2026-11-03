@@ -5,17 +5,17 @@ const supabaseClient = window.supabase.createClient(
 );
 
 let products = [];
-let category = "Alle";
+let category = "All";
 let cart = JSON.parse(localStorage.getItem("bratCart") || "{}");
 
 const $ = id => document.getElementById(id);
 
 const categoryEmojis = {
-  "Blöcke": "🧱",
+  "Blocks": "🧱",
   "Items": "💎",
-  "Rüstung & Waffen": "⚔️",
-  "Verzauberungen": "📘",
-  "Dienstleistungen": "🏗️"
+  "Armor & Weapons": "⚔️",
+  "Enchantments": "📘",
+  "Services": "🏗️"
 };
 
 function escapeHTML(value) {
@@ -29,7 +29,7 @@ function escapeHTML(value) {
 }
 
 function money(n) {
-  return `${Number(Number(n).toFixed(2)).toLocaleString("de-DE")} KB$`;
+  return `${Number(Number(n).toFixed(2)).toLocaleString("en-US")} KB$`;
 }
 
 function unitPrice(product, quantity) {
@@ -44,10 +44,10 @@ function unitPrice(product, quantity) {
   return price;
 }
 
-// Produkte und Mengenrabatte aus Supabase laden
+// Load products and quantity discounts from Supabase
 async function loadProducts() {
   $("products").innerHTML =
-    '<p class="muted">Produkte werden geladen ...</p>';
+    '<p class="muted">Loading products ...</p>';
 
   const { data, error } = await supabaseClient
     .from("products")
@@ -67,9 +67,9 @@ async function loadProducts() {
     .order("name");
 
   if (error) {
-    console.error("Fehler beim Laden:", error);
+    console.error("Product loading error:", error);
     $("products").innerHTML =
-      '<p class="muted">Produkte konnten nicht geladen werden. Bitte später erneut versuchen.</p>';
+      '<p class="muted">Could not load products. Please try again later.</p>';
     return;
   }
 
@@ -96,13 +96,13 @@ function renderProducts() {
   const query = $("search").value.toLowerCase();
 
   const shown = products.filter(p =>
-    (category === "Alle" || p.category === category) &&
+    (category === "All" || p.category === category) &&
     (p.name + " " + p.category + " " + p.desc)
       .toLowerCase()
       .includes(query)
   );
 
-  $("result-count").textContent = `${shown.length} Produkte`;
+  $("result-count").textContent = `${shown.length} products`;
 
   $("products").innerHTML = shown.map(p => `
     <article class="product-card">
@@ -114,16 +114,16 @@ function renderProducts() {
         <h3>${escapeHTML(p.name)}</h3>
         <p>${escapeHTML(p.desc)}</p>
         <div class="price-row">
-          <div class="price">${money(p.price)} <small>/ Stück</small></div>
+          <div class="price">${money(p.price)} <small>/ item</small></div>
           <button class="add-button" data-add="${escapeHTML(p.id)}"
-            aria-label="Produkt hinzufügen">+</button>
+            aria-label="Add ${escapeHTML(p.name)} to cart">+</button>
         </div>
         ${p.discounts.length
-          ? '<div class="discount-note">↘ Mengenrabatt verfügbar</div>'
+          ? '<div class="discount-note">↘ Quantity discounts available</div>'
           : ''}
       </div>
     </article>
-  `).join("") || '<p class="muted">Keine passenden Produkte gefunden.</p>';
+  `).join("") || '<p class="muted">No matching products found.</p>';
 
   document.querySelectorAll("[data-add]").forEach(button => {
     button.addEventListener("click", () => addToCart(button.dataset.add));
@@ -173,7 +173,7 @@ function renderCart() {
           <div class="cart-line">
             <div>
               <strong>${escapeHTML(p.name)}</strong>
-              <small>${money(unit)} pro Stück · ${money(sum)} gesamt</small>
+              <small>${money(unit)} per item · ${money(sum)} total</small>
             </div>
             <div class="qty">
               <button data-change="${escapeHTML(id)}" data-delta="-1">−</button>
@@ -183,7 +183,7 @@ function renderCart() {
           </div>
         `;
       }).join("")
-    : '<p class="empty">Dein Warenkorb ist noch leer.</p>';
+    : '<p class="empty">Your cart is empty.</p>';
 
   $("cart-count").textContent = count;
   $("cart-total").textContent = money(total);
@@ -205,6 +205,7 @@ function closeCart() {
   $("overlay").classList.remove("show");
 }
 
+// Category navigation
 document.querySelectorAll("[data-category]").forEach(el => {
   el.addEventListener("click", () => {
     category = el.dataset.category;
@@ -225,7 +226,7 @@ $("overlay").onclick = closeCart;
 $("checkout").onclick = () => {
   if (!Object.keys(cart).length) {
     $("order-status").textContent =
-      "Füge zuerst Produkte zum Warenkorb hinzu.";
+      "Add some products to your cart first.";
     return;
   }
 
@@ -235,13 +236,13 @@ $("checkout").onclick = () => {
 $("close-modal").onclick = () =>
   $("order-modal").classList.remove("show");
 
-// Bestellanfrage vorerst als Textdatei erstellen
+// Create order request as a text file for now
 $("send-order").onclick = () => {
   const name = $("player-name").value.trim();
 
   if (!name) {
     $("order-status").textContent =
-      "Bitte gib deinen Minecraft-Spielernamen ein.";
+      "Please enter your Minecraft username.";
     return;
   }
 
@@ -250,7 +251,7 @@ $("send-order").onclick = () => {
   );
 
   if (!entries.length) {
-    $("order-status").textContent = "Dein Warenkorb ist leer.";
+    $("order-status").textContent = "Your cart is empty.";
     return;
   }
 
@@ -264,28 +265,28 @@ $("send-order").onclick = () => {
     return sum + unitPrice(p, q) * q;
   }, 0);
 
-  const text = `BESTELLANFRAGE BRAT LTD.
-Spieler: ${name}
+  const text = `BRAT LTD. ORDER REQUEST
+Minecraft Username: ${name}
 ${lines.join("\n")}
-Gesamt: ${money(total)}
-Hinweis: ${$("order-note").value.trim() || "–"}
+Total: ${money(total)}
+Note: ${$("order-note").value.trim() || "None"}
 
-Bitte ingame mit Brat Ltd. die Übergabe und Zahlung in KB$ vereinbaren.`;
+Please arrange payment and delivery in-game with Brat Ltd. using KB$.`;
 
   const blob = new Blob([text], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
 
   a.href = url;
-  a.download = `Brat-Ltd-Bestellung-${name}.txt`;
+  a.download = `Brat-Ltd-Order-${name}.txt`;
   a.click();
 
   URL.revokeObjectURL(url);
 
   $("order-status").textContent =
-    "Bestellanfrage wurde als Textdatei erstellt. Eine automatische Übermittlung erfolgt noch nicht.";
+    "Order request created as a text file. It has not been submitted automatically.";
 };
 
-// Shop starten
+// Start shop
 renderCart();
 loadProducts();
