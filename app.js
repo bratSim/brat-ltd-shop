@@ -40,8 +40,14 @@ function escapeHTML(value) {
   }[c]));
 }
 
+// Shop and cart prices always show one decimal place.
 function money(n) {
   return `${Number(n).toFixed(1)} KB$`;
+}
+
+// Only the final checkout total is rounded up to a whole KB$.
+function checkoutMoney(n) {
+  return `${Math.ceil(Number(n)).toLocaleString("en-US")} KB$`;
 }
 
 function itemTextureId(name) {
@@ -59,7 +65,7 @@ function imageMarkup(name, cat, cls = "") {
   return `<img class="${cls}" src="${textureUrl(name)}" alt="${escapeHTML(name)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'fallback-icon',textContent:'${fallback}'}))">`;
 }
 
-// Price is calculated per stack and rounded up to whole KB$.
+// Discounted price per stack, kept to one decimal place.
 function unitPrice(p, stackCount) {
   let price = Number(p.price);
 
@@ -206,6 +212,31 @@ function saveCart() {
   localStorage.setItem("bratCart", JSON.stringify(cart));
 }
 
+// Calculate cart totals without rounding up.
+function getCartTotals() {
+  const entries = Object.entries(cart).filter(([id, q]) =>
+    products.some(p => String(p.id) === id) && q > 0
+  );
+
+  let total = 0;
+  let originalTotal = 0;
+
+  entries.forEach(([id, q]) => {
+    const p = products.find(x => String(x.id) === id);
+    const discountedPrice = unitPrice(p, q);
+
+    total += discountedPrice * q;
+    originalTotal += Number(p.price) * q;
+  });
+
+  return {
+    entries,
+    total: Math.round(total * 10) / 10,
+    originalTotal: Math.round(originalTotal * 10) / 10,
+    savings: Math.round((originalTotal - total) * 10) / 10
+  };
+}
+
 function renderCart() {
   const entries = Object.entries(cart).filter(([id, q]) =>
     products.some(p => String(p.id) === id) && q > 0
@@ -219,13 +250,12 @@ function renderCart() {
     ? entries.map(([id, q]) => {
         const p = products.find(x => String(x.id) === id);
         const price = unitPrice(p, q);
-        const originalPrice = Number(p.price);
-        const sum = price * q;
-        const originalSum = originalPrice * q;
+        const sum = Math.round(price * q * 10) / 10;
+        const originalSum = Math.round(Number(p.price) * q * 10) / 10;
         const itemCount = q * p.stackSize;
 
-        const discount = originalPrice > 0
-          ? Math.round((1 - price / originalPrice) * 100)
+        const discount = Number(p.price) > 0
+          ? Math.round((1 - price / Number(p.price)) * 100)
           : 0;
 
         total += sum;
@@ -255,7 +285,9 @@ function renderCart() {
       }).join("")
     : '<p class="empty">Your cart is empty.</p>';
 
-  const savings = originalTotal - total;
+  total = Math.round(total * 10) / 10;
+  originalTotal = Math.round(originalTotal * 10) / 10;
+  const savings = Math.round((originalTotal - total) * 10) / 10;
 
   $("cart-count").textContent = stackCount;
   $("cart-total").textContent = money(total);
@@ -306,14 +338,43 @@ $("open-cart").onclick = openCart;
 $("close-cart").onclick = closeCart;
 $("overlay").onclick = closeCart;
 
-$("checkout").onclick = () => {
-  if (!Object.keys(cart).length) {
+// Show the rounded total when the customer proceeds to checkout.
+function showCheckoutTotal() {
+  const { entries, total } = getCartTotals();
+
+  if (!entries.length) {
     $("order-status").textContent = "Add some products to your cart first.";
     return;
   }
 
+  const roundedTotal = Math.ceil(total);
+
+  let preview = $("checkout-total-preview");
+  if (!preview) {
+    preview = document.createElement("div");
+    preview.id = "checkout-total-preview";
+    preview.style.margin = "0 0 16px";
+    preview.style.padding = "12px";
+    preview.style.border = "1px solid rgba(255,255,255,0.18)";
+    preview.style.borderRadius = "8px";
+    preview.style.fontWeight = "700";
+
+    const modal = $("order-modal");
+    const firstInput = $("player-name");
+
+    if (firstInput && firstInput.parentElement) {
+      firstInput.parentElement.insertBefore(preview, firstInput);
+    } else {
+      modal.prepend(preview);
+    }
+  }
+
+  preview.textContent = `Final total: ${checkoutMoney(roundedTotal)}`;
+  $("order-status").textContent = "";
   $("order-modal").classList.add("show");
-};
+}
+
+$("checkout").onclick = showCheckoutTotal;
 
 $("close-modal").onclick = () => $("order-modal").classList.remove("show");
 
@@ -325,9 +386,7 @@ $("send-order").onclick = () => {
     return;
   }
 
-  const entries = Object.entries(cart).filter(([id, q]) =>
-    products.some(p => String(p.id) === id) && q > 0
-  );
+  const { entries, total } = getCartTotals();
 
   if (!entries.length) {
     $("order-status").textContent = "Your cart is empty.";
@@ -342,15 +401,13 @@ $("send-order").onclick = () => {
     return `${p.name}: ${q} stacks (${itemCount} items) – ${money(price * q)}`;
   });
 
-  const total = entries.reduce((sum, [id, q]) => {
-    const p = products.find(x => String(x.id) === id);
-    return sum + unitPrice(p, q) * q;
-  }, 0);
+  // Round up only the final checkout total.
+  const checkoutTotal = Math.ceil(total);
 
   const content = `BRAT LTD. ORDER REQUEST
 Minecraft Username: ${name}
 ${lines.join("\n")}
-Total: ${money(total)}
+Total: ${checkoutMoney(checkoutTotal)}
 Note: ${$("order-note").value.trim() || "None"}
 
 Please arrange payment and delivery in-game with Brat Ltd. using KB$.`;
