@@ -41,7 +41,10 @@ function escapeHTML(value) {
 }
 
 function money(n) {
-  return `${Number(Number(n).toFixed(2)).toLocaleString("en-US")} KB$`;
+  return `${Number(Number(n).toFixed(3)).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 3
+  })} KB$`;
 }
 
 function itemTextureId(name) {
