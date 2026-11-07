@@ -1,3 +1,4 @@
+
 const supabaseClient = window.supabase.createClient(
   window.SUPABASE_URL,
   window.SUPABASE_KEY
@@ -111,8 +112,6 @@ function getSalePrice(product) {
   );
 }
 
-// Manual discount is applied first.
-// Quantity discount is then applied to the reduced price.
 function unitPrice(product, quantity) {
   const salePrice = getSalePrice(product);
   const quantityDiscount = getDiscountPercent(quantity);
@@ -319,6 +318,13 @@ function renderOffers() {
         `;
       }).join("")
     : '<div class="loading-card">There are currently no special offers.</div>';
+
+  // Admin editing also works on homepage offers.
+  document.querySelectorAll("#offers-grid [data-edit-product]").forEach(button => {
+    button.addEventListener("click", () =>
+      openProductEditor(button.dataset.editProduct)
+    );
+  });
 }
 
 // ==================================
@@ -1324,9 +1330,7 @@ async function submitOrder() {
     total,
     originalTotal,
     savings,
-    checkoutTotal,
-    manualSavings,
-    quantitySavings
+    checkoutTotal
   } = totals;
 
   if (!entries.length) {
@@ -1355,7 +1359,6 @@ async function submitOrder() {
     const manualDiscount = getManualDiscount(product);
     const quantityDiscount = getDiscountPercent(quantity);
 
-    const salePrice = getSalePrice(product);
     const finalPrice = unitPrice(product, quantity);
 
     return {
