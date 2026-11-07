@@ -69,7 +69,7 @@ function unitPrice(p, stackCount) {
     }
   }
 
-  return price;
+  return Math.round(price);
 }
 
 function isOffer(p) {
