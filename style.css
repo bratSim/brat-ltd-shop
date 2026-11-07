@@ -1,23 +1,38 @@
 
-/* =========================================
-   BRAT LTD. — MAIN DESIGN
-========================================= */
+/* =====================================================
+   BRAT LTD. — PREMIUM MINECRAFT MARKETPLACE
+   Complete Stylesheet
+===================================================== */
 
 :root {
-  --bg: #11100f;
-  --surface: #191715;
-  --surface-light: #211e1a;
-  --surface-hover: #29231d;
-  --orange: #f2a044;
+  --bg: #100e0c;
+  --bg-soft: #15120f;
+  --surface: #1b1713;
+  --surface-light: #241e18;
+  --surface-hover: #30261c;
+
+  --orange: #f5a442;
+  --orange-light: #ffc078;
   --orange-dark: #c87927;
-  --text: #f5f1eb;
-  --muted: #a49a90;
-  --border: #332d27;
+
+  --text: #f8f3ec;
+  --muted: #a99c8e;
+  --border: #3a3026;
+
   --green: #8acb91;
   --red: #e68b7e;
+  --blue: #83b9e9;
+
   --font: 'DM Sans', sans-serif;
   --heading: 'Manrope', sans-serif;
+
+  --radius: 12px;
+  --shadow: 0 12px 35px rgba(0, 0, 0, .25);
 }
+
+/* =====================================================
+   RESET & GLOBAL
+===================================================== */
 
 * {
   box-sizing: border-box;
@@ -25,12 +40,14 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 110px;
+  scroll-padding-top: 120px;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background:
+    radial-gradient(ellipse at 50% -15%, rgba(180, 103, 32, .13), transparent 48%),
+    var(--bg);
   color: var(--text);
   font-family: var(--font);
   font-size: 14px;
@@ -46,6 +63,7 @@ select {
 
 button {
   cursor: pointer;
+  transition: background .2s, color .2s, border-color .2s, transform .2s;
 }
 
 button:disabled {
@@ -59,7 +77,7 @@ a {
 }
 
 a:hover {
-  color: #ffc078;
+  color: var(--orange-light);
 }
 
 img {
@@ -70,9 +88,9 @@ h1,
 h2,
 h3,
 h4 {
+  margin-top: 0;
   font-family: var(--heading);
   line-height: 1.2;
-  margin-top: 0;
 }
 
 p {
@@ -96,75 +114,88 @@ small {
 }
 
 .eyebrow {
+  color: var(--orange);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 2px;
+  font-weight: 900;
+  letter-spacing: 2.4px;
   text-transform: uppercase;
 }
 
-/* =========================================
+::selection {
+  background: var(--orange);
+  color: #17110b;
+}
+
+:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 3px;
+}
+
+/* =====================================================
    ANNOUNCEMENT BAR
-========================================= */
+===================================================== */
 
 .announcement {
-  padding: 9px 20px;
-  background: #20180f;
-  border-bottom: 1px solid #49301a;
+  padding: 10px 20px;
+  background: linear-gradient(90deg, #21160c, #302012, #21160c);
+  border-bottom: 1px solid #594027;
   text-align: center;
   color: #e8bd8e;
   font-size: 11px;
-  letter-spacing: .7px;
+  letter-spacing: 1.1px;
 }
 
-/* =========================================
+/* =====================================================
    HEADER
-========================================= */
+===================================================== */
 
 .topbar {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(17, 16, 15, .96);
+  background: rgba(16, 14, 12, .95);
   backdrop-filter: blur(18px);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(245, 164, 66, .16);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .2);
 }
 
 .topbar-inner {
-  max-width: 1400px;
-  min-height: 78px;
+  max-width: 1550px;
+  min-height: 88px;
   margin: auto;
-  padding: 0 35px;
+  padding: 0 45px;
   display: flex;
   align-items: center;
-  gap: 35px;
+  gap: 38px;
 }
 
 .logo {
   display: flex;
   align-items: center;
   gap: 12px;
-  color: var(--text);
   flex-shrink: 0;
+  color: var(--text);
 }
 
 .logo-mark {
-  width: 39px;
-  height: 39px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   background: var(--orange);
   color: #17110b;
+  border-radius: 11px;
   font-family: var(--heading);
-  font-size: 21px;
+  font-size: 22px;
   font-weight: 900;
-  border-radius: 9px;
+  box-shadow: 0 4px 18px rgba(245, 164, 66, .22);
 }
 
 .logo-text {
   font-family: var(--heading);
-  font-size: 19px;
+  font-size: 21px;
   font-weight: 900;
-  letter-spacing: -.6px;
+  letter-spacing: -.8px;
 }
 
 .logo-text span {
@@ -174,15 +205,17 @@ small {
 .nav {
   display: flex;
   align-items: center;
-  gap: 23px;
+  gap: 27px;
   flex: 1;
 }
 
 .nav-link {
   position: relative;
+  padding: 12px 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
   transition: color .2s;
 }
 
@@ -194,11 +227,13 @@ small {
 .nav-link.active::after {
   content: "";
   position: absolute;
-  bottom: -29px;
+  bottom: -32px;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 3px;
   background: var(--orange);
+  border-radius: 5px;
+  box-shadow: 0 0 12px rgba(245, 164, 66, .45);
 }
 
 .header-actions {
@@ -211,19 +246,26 @@ small {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 13px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  padding: 11px 15px;
+  background: #1b1713;
+  border: 1px solid #41352a;
+  border-radius: 9px;
+  transition: .2s;
+}
+
+.search-box:focus-within {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgba(245, 164, 66, .08);
 }
 
 .search-box input {
-  width: 145px;
+  width: 175px;
+  padding: 0;
   color: var(--text);
   background: transparent;
   border: 0;
   outline: 0;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .search-box input::placeholder {
@@ -235,24 +277,25 @@ small {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 10px 15px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  padding: 12px 18px;
+  background: #211a13;
+  border: 1px solid #55402b;
+  border-radius: 9px;
   color: var(--text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
-  transition: .2s;
 }
 
 .cart-button:hover {
+  background: #302315;
   border-color: var(--orange);
   color: var(--orange);
+  box-shadow: 0 0 18px rgba(245, 164, 66, .1);
 }
 
 #cart-count {
-  min-width: 19px;
-  height: 19px;
+  min-width: 20px;
+  height: 20px;
   padding: 0 5px;
   display: grid;
   place-items: center;
@@ -263,92 +306,101 @@ small {
   font-weight: 900;
 }
 
-/* =========================================
+/* =====================================================
    MAIN LAYOUT
-========================================= */
+===================================================== */
 
 main {
-  max-width: 1400px;
+  max-width: 1550px;
   margin: auto;
-  padding: 0 35px 100px;
+  padding: 0 45px 110px;
 }
 
 section[id] {
-  scroll-margin-top: 110px;
+  scroll-margin-top: 120px;
 }
 
 .section-heading {
-  margin: 55px 0 28px;
+  margin: 65px 0 32px;
 }
 
 .section-heading h1,
 .section-heading h2 {
   margin: 8px 0;
-  font-size: clamp(28px, 4vw, 43px);
-  letter-spacing: -1.5px;
+  font-size: clamp(32px, 4vw, 46px);
+  letter-spacing: -1.8px;
 }
 
 .section-heading p {
-  max-width: 580px;
+  max-width: 650px;
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.8;
 }
 
-/* =========================================
-   OFFERS SECTION
-========================================= */
+/* =====================================================
+   OFFERS
+===================================================== */
 
 #offers {
-  padding-top: 45px;
+  min-height: 440px;
+  padding-top: 65px;
 }
 
 #offers .section-heading {
-  margin-top: 15px;
+  margin-top: 10px;
+  margin-bottom: 30px;
 }
 
 #offers-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
   gap: 22px;
 }
 
 .offer-card {
   position: relative;
-  min-height: 260px;
+  min-height: 245px;
   display: flex;
   align-items: center;
-  gap: 22px;
-  padding: 25px;
+  gap: 25px;
+  padding: 30px;
   overflow: hidden;
+
   background:
-    radial-gradient(circle at 15% 50%, rgba(242, 160, 68, .13), transparent 48%),
-    linear-gradient(135deg, #211c16, #171513);
-  border: 1px solid #463324;
-  border-radius: 13px;
-  transition: transform .2s, border-color .2s;
+    radial-gradient(circle at 12% 50%, rgba(245, 164, 66, .17), transparent 55%),
+    linear-gradient(135deg, #272017, #191612 75%);
+
+  border: 1px solid #59432c;
+  border-radius: 15px;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, .18);
+
+  transition: transform .2s, border-color .2s, box-shadow .2s;
 }
 
 .offer-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-5px);
   border-color: var(--orange);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .3);
 }
 
 .offer-image {
-  width: 100px;
-  height: 100px;
+  width: 115px;
+  height: 115px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, .2);
-  border: 1px solid rgba(255, 255, 255, .06);
-  border-radius: 12px;
+  background: rgba(0, 0, 0, .25);
+  border: 1px solid rgba(245, 164, 66, .13);
+  border-radius: 15px;
 }
 
 .offer-image img {
-  width: 65px;
-  height: 65px;
+  width: 78px;
+  height: 78px;
   object-fit: contain;
   image-rendering: pixelated;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .35));
 }
 
 .offer-copy {
@@ -358,14 +410,15 @@ section[id] {
 .offer-kicker {
   margin-bottom: 7px;
   color: var(--orange);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 900;
-  letter-spacing: 1.6px;
+  letter-spacing: 2px;
 }
 
 .offer-copy h3 {
   margin: 0 0 12px;
-  font-size: 19px;
+  font-size: 23px;
+  letter-spacing: -.5px;
 }
 
 .offer-prices {
@@ -377,13 +430,13 @@ section[id] {
 
 .old-price {
   color: #82776d;
-  text-decoration: line-through;
   font-size: 12px;
+  text-decoration: line-through;
 }
 
 .offer-price {
   color: var(--orange);
-  font-size: 19px;
+  font-size: 23px;
   font-weight: 900;
 }
 
@@ -400,14 +453,15 @@ section[id] {
 
 .offer-badge {
   position: absolute;
-  top: 14px;
-  right: 14px;
-  padding: 6px 10px;
+  top: 17px;
+  right: 17px;
+  padding: 7px 12px;
   background: var(--orange);
   color: #201408;
-  border-radius: 5px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 900;
+  box-shadow: 0 4px 15px rgba(245, 164, 66, .15);
 }
 
 .loading-card {
@@ -420,78 +474,86 @@ section[id] {
   text-align: center;
 }
 
-/* =========================================
+/* =====================================================
    SHOP
-========================================= */
+===================================================== */
 
 #shop {
-  padding-top: 25px;
+  padding-top: 55px;
 }
 
 #shop .section-heading {
-  margin-top: 20px;
+  margin-top: 10px;
 }
 
 #result-count {
-  margin-bottom: 18px;
+  margin-bottom: 25px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 #products {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 22px;
   align-items: stretch;
 }
 
-/* =========================================
+/* =====================================================
    PRODUCT CARDS
-========================================= */
+===================================================== */
 
 .product-card {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  transition: transform .2s, border-color .2s;
+  background: linear-gradient(160deg, #201b16, #171411);
+  border: 1px solid #393027;
+  border-radius: 14px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, .13);
+  transition: transform .2s, border-color .2s, box-shadow .2s;
 }
 
 .product-card:hover {
-  transform: translateY(-3px);
-  border-color: #6b4a2b;
+  transform: translateY(-5px);
+  border-color: #80603c;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, .3);
 }
 
 .product-visual {
   position: relative;
-  height: 180px;
+  height: 205px;
   display: grid;
   place-items: center;
   background:
-    radial-gradient(circle, rgba(242, 160, 68, .09), transparent 65%),
-    #171513;
+    radial-gradient(circle at center, rgba(245, 164, 66, .13), transparent 65%),
+    linear-gradient(145deg, #211c17, #171411);
   border-bottom: 1px solid var(--border);
 }
 
 .product-visual > img {
-  width: 85px;
-  height: 85px;
+  width: 105px;
+  height: 105px;
   object-fit: contain;
   image-rendering: pixelated;
+  filter: drop-shadow(0 10px 12px rgba(0, 0, 0, .35));
+  transition: transform .25s;
+}
+
+.product-card:hover .product-visual > img {
+  transform: scale(1.1);
 }
 
 .product-tag {
   position: absolute;
-  top: 12px;
-  left: 12px;
-  padding: 5px 8px;
-  background: #28231e;
-  border: 1px solid var(--border);
+  top: 14px;
+  left: 14px;
+  padding: 6px 9px;
+  background: #30271e;
+  border: 1px solid #4a3b2b;
   border-radius: 5px;
   color: #c8b9a9;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
 }
 
@@ -509,57 +571,30 @@ section[id] {
 
 .product-visual > .product-discount-badge {
   position: absolute;
-  top: 12px;
+  top: 14px;
   right: 50px;
 }
 
-/* =========================================
-   PRODUCT ADMIN THREE-DOT MENU
-========================================= */
-
-.product-admin-menu {
-  position: absolute;
-  top: 9px;
-  right: 10px;
-  z-index: 5;
-  width: 31px;
-  height: 31px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  background: rgba(12, 11, 10, .85);
-  border: 1px solid #55402b;
-  border-radius: 7px;
+.fallback-icon {
   color: var(--orange);
-  font-size: 23px;
-  line-height: 1;
-  transition: .2s;
-}
-
-.product-admin-menu:hover {
-  background: var(--orange);
-  color: #17110b;
-  border-color: var(--orange);
-}
-
-.offer-card > .product-admin-menu {
-  top: 12px;
-  right: 55px;
+  font-size: 35px;
 }
 
 .product-info {
-  padding: 17px;
+  padding: 21px;
 }
 
 .product-info h3 {
-  margin: 0 0 6px;
-  font-size: 16px;
+  margin: 0 0 7px;
+  font-size: 18px;
+  letter-spacing: -.3px;
 }
 
 .product-info > p {
   min-height: 35px;
   margin: 0 0 15px;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.7;
 }
 
 .price-row {
@@ -571,7 +606,7 @@ section[id] {
 
 .price {
   color: var(--orange);
-  font-size: 18px;
+  font-size: 21px;
   font-weight: 900;
 }
 
@@ -601,41 +636,70 @@ section[id] {
   margin-top: 13px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
-  color: #928578;
+  color: #b4a28e;
   font-size: 10px;
 }
 
 .add-button {
-  width: 35px;
-  height: 35px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
   display: grid;
   place-items: center;
   background: var(--orange);
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
   color: #1c130b;
   font-size: 21px;
   font-weight: 800;
-  transition: .2s;
+  box-shadow: 0 5px 15px rgba(245, 164, 66, .15);
 }
 
 .add-button:hover {
-  background: #ffc078;
-  transform: scale(1.05);
+  background: var(--orange-light);
+  transform: translateY(-2px) scale(1.05);
 }
 
-.fallback-icon {
+/* =====================================================
+   PRODUCT ADMIN MENU
+===================================================== */
+
+.product-admin-menu {
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  z-index: 5;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: rgba(15, 13, 11, .92);
+  border: 1px solid #634a30;
+  border-radius: 8px;
   color: var(--orange);
-  font-size: 35px;
+  font-size: 23px;
+  line-height: 1;
+  backdrop-filter: blur(8px);
 }
 
-/* =========================================
+.product-admin-menu:hover {
+  background: var(--orange);
+  color: #17110b;
+  border-color: var(--orange);
+}
+
+.offer-card > .product-admin-menu {
+  top: 12px;
+  right: 55px;
+}
+
+/* =====================================================
    PRODUCT EDITOR MODAL
-========================================= */
+===================================================== */
 
 .product-editor-modal {
-  max-width: 440px;
+  max-width: 490px;
 }
 
 .product-editor-modal h2 {
@@ -660,10 +724,10 @@ section[id] {
 
 .product-editor-modal input {
   width: 100%;
-  padding: 12px 13px;
-  background: #12110f;
+  padding: 13px;
+  background: #12100e;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 9px;
   outline: none;
   color: var(--text);
 }
@@ -678,14 +742,14 @@ section[id] {
 
 .product-editor-preview {
   min-height: 65px;
-  padding: 15px;
+  padding: 19px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  background: #211b14;
-  border: 1px solid #49351f;
-  border-radius: 8px;
+  background: linear-gradient(135deg, #302416, #1c1712);
+  border: 1px solid #5a4128;
+  border-radius: 10px;
 }
 
 .product-editor-preview > div {
@@ -699,19 +763,19 @@ section[id] {
   font-size: 19px;
 }
 
-/* =========================================
+/* =====================================================
    SERVICE REQUEST FORM
-========================================= */
+===================================================== */
 
 .service-request-card {
   grid-column: 1 / -1;
-  margin-top: 30px;
-  padding: 35px;
+  margin-top: 55px;
+  padding: 42px;
   background:
-    radial-gradient(circle at top right, rgba(242, 160, 68, .08), transparent 45%),
-    var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 13px;
+    radial-gradient(circle at top right, rgba(245, 164, 66, .1), transparent 45%),
+    linear-gradient(145deg, #201b16, #171411);
+  border: 1px solid #493927;
+  border-radius: 16px;
 }
 
 .service-request-header {
@@ -721,7 +785,7 @@ section[id] {
 
 .service-request-header h3 {
   margin: 10px 0;
-  font-size: 27px;
+  font-size: 31px;
 }
 
 .service-request-header h3 em {
@@ -756,12 +820,13 @@ section[id] {
 .service-label input,
 .service-label textarea {
   width: 100%;
-  padding: 12px;
+  padding: 14px;
   background: #12110f;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 9px;
   outline: none;
   color: var(--text);
+  font-size: 13px;
   resize: vertical;
 }
 
@@ -800,43 +865,45 @@ section[id] {
   font-size: 11px;
 }
 
-/* =========================================
-   BUTTONS
-========================================= */
+/* =====================================================
+   GENERAL BUTTONS
+===================================================== */
 
 .checkout {
   width: 100%;
-  min-height: 47px;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 17px;
+  padding: 0 20px;
   background: var(--orange);
   border: 0;
-  border-radius: 7px;
+  border-radius: 9px;
   color: #1b1209;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
-  transition: .2s;
+  box-shadow: 0 5px 18px rgba(245, 164, 66, .13);
 }
 
 .checkout:hover {
-  background: #ffc078;
+  background: var(--orange-light);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(245, 164, 66, .2);
 }
 
 .checkout span {
   font-size: 18px;
 }
 
-/* =========================================
-   CART OVERLAY AND PANEL
-========================================= */
+/* =====================================================
+   CART OVERLAY
+===================================================== */
 
 #overlay {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0, 0, 0, .65);
+  background: rgba(0, 0, 0, .72);
   opacity: 0;
   visibility: hidden;
   transition: .25s;
@@ -847,6 +914,10 @@ section[id] {
   visibility: visible;
 }
 
+/* =====================================================
+   CART PANEL
+===================================================== */
+
 #cart-panel {
   position: fixed;
   top: 0;
@@ -856,8 +927,9 @@ section[id] {
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: #171513;
+  background: #171410;
   border-left: 1px solid var(--border);
+  box-shadow: -15px 0 60px rgba(0, 0, 0, .35);
   transition: right .3s ease;
 }
 
@@ -866,8 +938,8 @@ section[id] {
 }
 
 .cart-header {
-  min-height: 75px;
-  padding: 20px;
+  min-height: 85px;
+  padding: 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -876,7 +948,7 @@ section[id] {
 
 .cart-header h2 {
   margin: 0;
-  font-size: 21px;
+  font-size: 24px;
 }
 
 .icon-button {
@@ -899,11 +971,11 @@ section[id] {
 #cart-items {
   flex: 1;
   overflow-y: auto;
-  padding: 15px 20px;
+  padding: 18px 25px;
 }
 
 .cart-line {
-  padding: 17px 0;
+  padding: 20px 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -918,7 +990,7 @@ section[id] {
 .cart-line strong {
   display: block;
   margin-bottom: 5px;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .cart-line small {
@@ -966,9 +1038,9 @@ section[id] {
 }
 
 .cart-footer {
-  padding: 20px;
-  border-top: 1px solid var(--border);
-  background: #1c1916;
+  padding: 25px;
+  border-top: 1px solid #4b3826;
+  background: #201a14;
 }
 
 .cart-footer-row {
@@ -989,9 +1061,9 @@ section[id] {
   color: var(--orange);
 }
 
-/* =========================================
-   CHECKOUT MODAL
-========================================= */
+/* =====================================================
+   MODALS
+===================================================== */
 
 .modal-backdrop {
   position: fixed;
@@ -1001,7 +1073,7 @@ section[id] {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(0, 0, 0, .78);
+  background: rgba(0, 0, 0, .8);
   opacity: 0;
   visibility: hidden;
   transition: .2s;
@@ -1018,11 +1090,13 @@ section[id] {
   max-width: 480px;
   max-height: 90dvh;
   overflow-y: auto;
-  padding: 30px;
-  background: #1b1916;
-  border: 1px solid #493b2b;
-  border-radius: 13px;
-  box-shadow: 0 25px 90px rgba(0, 0, 0, .55);
+  padding: 35px;
+  background:
+    radial-gradient(circle at top right, rgba(245, 164, 66, .08), transparent 50%),
+    #1b1814;
+  border: 1px solid #5b432c;
+  border-radius: 16px;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, .65);
   transform: translateY(12px);
   transition: transform .2s;
 }
@@ -1039,7 +1113,7 @@ section[id] {
 
 .modal h2 {
   margin: 8px 0;
-  font-size: 26px;
+  font-size: 29px;
 }
 
 .modal > p {
@@ -1099,9 +1173,9 @@ section[id] {
 }
 
 .checkout-summary hr {
+  margin: 10px 0;
   border: 0;
   border-top: 1px solid var(--border);
-  margin: 10px 0;
 }
 
 #order-status {
@@ -1109,27 +1183,26 @@ section[id] {
   font-size: 11px;
 }
 
-/* =========================================
+/* =====================================================
    FLOATING ADMIN BUTTON
-========================================= */
+===================================================== */
 
 #admin-login-open {
   position: fixed;
-  right: 25px;
-  bottom: 24px;
+  right: 30px;
+  bottom: 28px;
   z-index: 150;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 17px;
-  background: #211b14;
-  border: 1px solid #5a4026;
-  border-radius: 9px;
+  padding: 14px 20px;
+  background: linear-gradient(135deg, #302315, #201810);
+  border: 1px solid #75512e;
+  border-radius: 11px;
   color: var(--orange);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, .35);
-  transition: .2s;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .4);
 }
 
 #admin-login-open:hover {
@@ -1137,18 +1210,19 @@ section[id] {
   color: #1b1209;
   border-color: var(--orange);
   transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(245, 164, 66, .2);
 }
 
 .admin-login-icon {
   font-size: 15px;
 }
 
-/* =========================================
+/* =====================================================
    ADMIN DASHBOARD
-========================================= */
+===================================================== */
 
 #admin-section {
-  padding: 45px 0 80px;
+  padding: 65px 0 80px;
 }
 
 .admin-header {
@@ -1161,7 +1235,8 @@ section[id] {
 
 .admin-header h1 {
   margin: 7px 0;
-  font-size: 35px;
+  font-size: 40px;
+  letter-spacing: -1px;
 }
 
 .admin-header p {
@@ -1176,7 +1251,7 @@ section[id] {
 
 #admin-refresh,
 #admin-logout {
-  padding: 10px 15px;
+  padding: 11px 16px;
   background: var(--surface-light);
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -1203,9 +1278,9 @@ section[id] {
   font-size: 11px;
 }
 
-/* =========================================
+/* =====================================================
    ADMIN FILTERS
-========================================= */
+===================================================== */
 
 .admin-filters {
   display: flex;
@@ -1215,14 +1290,13 @@ section[id] {
 }
 
 .admin-filter {
-  padding: 9px 15px;
+  padding: 11px 17px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 8px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
-  transition: .2s;
 }
 
 .admin-filter:hover {
@@ -1236,9 +1310,9 @@ section[id] {
   color: var(--orange);
 }
 
-/* =========================================
+/* =====================================================
    ADMIN REQUEST CARDS
-========================================= */
+===================================================== */
 
 #admin-requests {
   display: flex;
@@ -1250,16 +1324,17 @@ section[id] {
   overflow: hidden;
   background: linear-gradient(145deg, #1d1a17, #171513);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 15px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, .14);
   transition: border-color .2s;
 }
 
 .request-card:hover {
-  border-color: #61472e;
+  border-color: #80603c;
 }
 
 .request-card-header {
-  padding: 23px 25px;
+  padding: 27px 30px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1288,9 +1363,9 @@ section[id] {
   align-items: center;
   gap: 7px;
   padding: 7px 12px;
+  background: var(--surface-light);
   border: 1px solid var(--border);
   border-radius: 50px;
-  background: var(--surface-light);
   color: var(--muted);
   font-size: 10px;
   font-weight: 900;
@@ -1314,7 +1389,7 @@ section[id] {
 }
 
 .status-accepted {
-  color: #83b9e9;
+  color: var(--blue);
   border-color: #345675;
   background: rgba(90, 151, 204, .08);
 }
@@ -1331,15 +1406,15 @@ section[id] {
   background: rgba(230, 139, 126, .08);
 }
 
-/* =========================================
+/* =====================================================
    REQUEST DETAILS
-========================================= */
+===================================================== */
 
 .request-details {
-  padding: 23px 25px;
+  padding: 27px 30px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, .7fr);
-  gap: 22px;
+  gap: 18px;
 }
 
 .request-items-list {
@@ -1357,9 +1432,9 @@ section[id] {
 .request-item {
   margin-bottom: 10px;
   padding: 15px;
-  background: #141311;
-  border: 1px solid #302a24;
-  border-radius: 8px;
+  background: #181511;
+  border: 1px solid #393027;
+  border-radius: 10px;
 }
 
 .request-item:last-child {
@@ -1413,9 +1488,9 @@ section[id] {
 .request-links,
 .request-images {
   padding: 15px;
-  background: #141311;
-  border: 1px solid #302a24;
-  border-radius: 8px;
+  background: #181511;
+  border: 1px solid #393027;
+  border-radius: 10px;
 }
 
 .request-description strong,
@@ -1468,9 +1543,9 @@ section[id] {
   transform: scale(1.04);
 }
 
-/* =========================================
+/* =====================================================
    REQUEST FINANCIALS
-========================================= */
+===================================================== */
 
 .request-financials {
   grid-column: 1 / -1;
@@ -1508,12 +1583,12 @@ section[id] {
   font-size: 19px;
 }
 
-/* =========================================
+/* =====================================================
    REQUEST ACTIONS
-========================================= */
+===================================================== */
 
 .request-actions {
-  padding: 16px 25px;
+  padding: 18px 30px;
   display: flex;
   justify-content: flex-end;
   gap: 9px;
@@ -1522,12 +1597,11 @@ section[id] {
 }
 
 .request-actions button {
-  padding: 10px 15px;
+  padding: 12px 18px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 10px;
   font-weight: 900;
-  transition: .2s;
 }
 
 .request-action-accept {
@@ -1559,18 +1633,18 @@ section[id] {
   text-align: center;
 }
 
-/* =========================================
+/* =====================================================
    FOOTER
-========================================= */
+===================================================== */
 
 footer {
-  padding: 40px 35px;
-  border-top: 1px solid var(--border);
-  background: #0d0c0b;
+  padding: 45px;
+  background: #0b0a09;
+  border-top: 1px solid #30261c;
 }
 
 .footer-inner {
-  max-width: 1400px;
+  max-width: 1550px;
   margin: auto;
   display: flex;
   align-items: center;
@@ -1580,12 +1654,12 @@ footer {
 
 footer p {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
 }
 
-/* =========================================
+/* =====================================================
    SCROLLBAR
-========================================= */
+===================================================== */
 
 ::-webkit-scrollbar {
   width: 8px;
@@ -1604,18 +1678,18 @@ footer p {
   background: var(--orange-dark);
 }
 
-/* =========================================
-   RESPONSIVE: TABLET
-========================================= */
+/* =====================================================
+   TABLET
+===================================================== */
 
 @media (max-width: 1100px) {
   .topbar-inner {
     gap: 20px;
-    padding: 0 22px;
+    padding: 0 25px;
   }
 
   .nav {
-    gap: 13px;
+    gap: 15px;
   }
 
   .nav-link {
@@ -1623,27 +1697,23 @@ footer p {
   }
 
   main {
-    padding-right: 22px;
-    padding-left: 22px;
+    padding-right: 25px;
+    padding-left: 25px;
   }
 
   #products {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-
-  #offers-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
-/* =========================================
-   RESPONSIVE: MOBILE
-========================================= */
+/* =====================================================
+   MOBILE
+===================================================== */
 
 @media (max-width: 760px) {
   .topbar-inner {
     min-height: auto;
-    padding: 13px 16px;
+    padding: 14px 16px;
     flex-wrap: wrap;
     gap: 12px;
   }
@@ -1656,12 +1726,17 @@ footer p {
     font-size: 17px;
   }
 
+  .logo-mark {
+    width: 38px;
+    height: 38px;
+  }
+
   .nav {
     order: 3;
     width: 100%;
     overflow-x: auto;
     padding: 8px 0 5px;
-    gap: 20px;
+    gap: 22px;
   }
 
   .nav-link {
@@ -1683,6 +1758,7 @@ footer p {
 
   .search-box input {
     width: 85px;
+    font-size: 11px;
   }
 
   .cart-button {
@@ -1699,7 +1775,8 @@ footer p {
   }
 
   #offers {
-    padding-top: 25px;
+    min-height: auto;
+    padding-top: 30px;
   }
 
   .section-heading {
@@ -1718,48 +1795,52 @@ footer p {
 
   .offer-card {
     min-height: 190px;
-    padding: 19px;
+    padding: 20px;
     gap: 16px;
   }
 
   .offer-image {
-    width: 80px;
-    height: 80px;
+    width: 85px;
+    height: 85px;
   }
 
   .offer-image img {
-    width: 55px;
-    height: 55px;
+    width: 60px;
+    height: 60px;
   }
 
   .offer-copy h3 {
-    font-size: 16px;
+    font-size: 17px;
   }
 
   .offer-price {
-    font-size: 16px;
+    font-size: 17px;
+  }
+
+  #shop {
+    padding-top: 35px;
   }
 
   #products {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 11px;
+    gap: 13px;
   }
 
   .product-visual {
-    height: 140px;
+    height: 150px;
   }
 
   .product-visual > img {
-    width: 65px;
-    height: 65px;
+    width: 75px;
+    height: 75px;
   }
 
   .product-info {
-    padding: 12px;
+    padding: 14px;
   }
 
   .product-info h3 {
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .product-info > p {
@@ -1767,7 +1848,7 @@ footer p {
   }
 
   .price {
-    font-size: 15px;
+    font-size: 17px;
   }
 
   .product-prices .old-price {
@@ -1775,12 +1856,16 @@ footer p {
   }
 
   .add-button {
-    width: 31px;
-    height: 31px;
+    width: 33px;
+    height: 33px;
   }
 
   .service-request-card {
-    padding: 20px;
+    padding: 22px;
+  }
+
+  .service-request-header h3 {
+    font-size: 25px;
   }
 
   #service-form {
@@ -1805,6 +1890,10 @@ footer p {
 
   .admin-header h1 {
     font-size: 29px;
+  }
+
+  .admin-header-actions {
+    flex-wrap: wrap;
   }
 
   .request-card-header {
@@ -1832,9 +1921,9 @@ footer p {
 
   .request-financials .request-total {
     grid-column: 1 / -1;
-    text-align: left;
     padding-top: 10px;
     border-top: 1px solid var(--border);
+    text-align: left;
   }
 
   .request-actions {
@@ -1846,9 +1935,17 @@ footer p {
     flex: 1;
   }
 
+  .modal {
+    padding: 25px 20px;
+  }
+
   .footer-inner {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  footer {
+    padding: 30px 20px;
   }
 
   #admin-login-open {
@@ -1857,6 +1954,10 @@ footer p {
     padding: 10px 13px;
   }
 }
+
+/* =====================================================
+   SMALL MOBILE
+===================================================== */
 
 @media (max-width: 390px) {
   #products {
@@ -1873,7 +1974,22 @@ footer p {
   }
 
   .request-status {
-    font-size: 8px;
     padding: 6px 8px;
+    font-size: 8px;
+  }
+
+  .offer-card {
+    gap: 12px;
+    padding: 15px;
+  }
+
+  .offer-image {
+    width: 72px;
+    height: 72px;
+  }
+
+  .offer-image img {
+    width: 50px;
+    height: 50px;
   }
 }
