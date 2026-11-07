@@ -2,14 +2,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#11100f">
-  <title>Brat Ltd. | KantoBay Trading Company</title>
+  <title>Brat Ltd. — KantoBay Marketplace</title>
 
+  <link rel="icon" href="favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css">
 </head>
@@ -17,296 +18,247 @@
 <body>
 
   <div class="announcement">
-    <span class="announcement-dot"></span>
-    THE OFFICIAL BRAT LTD. STORE
-    <span class="announcement-divider">/</span>
-    KANTOBAY
+    <span>✦</span> Welcome to Brat Ltd. — The KantoBay Marketplace
   </div>
 
   <header class="topbar">
-    <a class="brand" href="#" data-category="All">
+    <a href="#" class="brand" aria-label="Brat Ltd. Home">
       <span class="brand-mark">B</span>
-      <span class="brand-name">
-        BRAT <b>LTD.</b>
-        <small>ROYAL TRADING COMPANY</small>
-      </span>
+      <span class="brand-name">BRAT<span> LTD.</span></span>
     </a>
 
-    <label class="search-wrap">
+    <div class="header-search">
       <span class="search-icon">⌕</span>
-      <input
-        id="search"
-        type="search"
-        placeholder="Search this category..."
-        aria-label="Search products"
-      >
-    </label>
+      <input id="search" type="search" placeholder="Search the marketplace..." autocomplete="off">
+    </div>
 
-    <button class="cart-button" id="open-cart" type="button">
-      Cart <span class="cart-count" id="cart-count">0</span>
+    <button class="cart-header-button" id="open-cart" type="button">
+      <span class="cart-symbol">🛒</span>
+      <span>Cart</span>
+      <span class="cart-count" id="cart-count">0</span>
     </button>
   </header>
 
-  <nav class="nav" id="shop-navigation" aria-label="Product categories">
-    <a href="#" data-category="All" class="nav-link active">Overview</a>
-    <a href="#" data-category="Blocks" class="nav-link">Blocks</a>
-    <a href="#" data-category="Items" class="nav-link">Items</a>
-    <a href="#" data-category="Armor & Weapons" class="nav-link">Armor &amp; Weapons</a>
-    <a href="#" data-category="Enchantments" class="nav-link">Enchantments</a>
-    <a href="#" data-category="Services" class="nav-link">Services</a>
+  <nav class="nav" id="shop-navigation">
+    <a href="#" class="nav-link active" data-category="All">
+      <span>⌂</span> Overview
+    </a>
+    <a href="#" class="nav-link" data-category="Blocks">
+      <span>▦</span> Blocks
+    </a>
+    <a href="#" class="nav-link" data-category="Items">
+      <span>✦</span> Items
+    </a>
+    <a href="#" class="nav-link" data-category="Armor & Weapons">
+      <span>⚔</span> Armor & Weapons
+    </a>
+    <a href="#" class="nav-link" data-category="Enchantments">
+      <span>✧</span> Enchantments
+    </a>
+    <a href="#" class="nav-link" data-category="Services">
+      <span>◈</span> Services
+    </a>
   </nav>
 
-  <main>
+  <main class="main-container">
 
-    <!-- OVERVIEW: OFFERS ONLY -->
-    <section class="offers-section" id="offers">
-      <div class="section-top">
+    <!-- OVERVIEW / OFFERS -->
+    <section id="offers" class="offers-section">
+      <div class="section-heading">
         <div>
-          <div class="eyebrow orange">HAND-PICKED FOR YOU</div>
-          <h1>Featured <em>offers.</em></h1>
-          <p class="section-subtitle">
-            Good deals, selected from the Brat Ltd. collection.
-          </p>
+          <div class="eyebrow">THE KANTOBAY MARKETPLACE</div>
+          <h1>Featured <span class="orange">Offers.</span></h1>
+          <p class="muted">Discover selected deals from Brat Ltd.</p>
         </div>
+        <div class="section-decoration">BRAT LTD. / 01</div>
       </div>
 
-      <div class="offers-grid" id="offers-grid">
-        <div class="loading-card">Loading featured offers...</div>
+      <div id="offers-grid" class="offers-grid">
+        <div class="loading-state">Loading offers...</div>
+      </div>
+
+      <div id="empty-offers" class="empty-state" style="display:none;">
+        <div class="empty-icon">✦</div>
+        <h3>No offers available right now</h3>
+        <p>Check back later for new deals.</p>
       </div>
     </section>
 
-    <!-- CATEGORY PAGES -->
-    <section class="shop-section" id="shop" style="display:none">
-      <div class="section-top shop-heading">
+    <!-- CATEGORY SHOP -->
+    <section id="shop" class="shop-section" style="display:none;">
+      <div class="section-heading">
         <div>
-          <div class="eyebrow orange">THE BRAT LTD. COLLECTION</div>
-          <h1 id="category-title">Browse the <em>store.</em></h1>
-          <p class="section-subtitle" id="category-description">
-            Find the right products for your next project.
-          </p>
+          <div class="eyebrow">EXPLORE OUR MARKETPLACE</div>
+          <h1 id="category-title">All Products</h1>
+          <p class="muted" id="category-description">Browse available products.</p>
         </div>
-
-        <span class="result-count" id="result-count"></span>
+        <div class="section-decoration">BRAT LTD. / 02</div>
       </div>
 
-      <div class="product-grid" id="products">
-        <p class="muted">Loading products...</p>
+      <div id="products" class="products-grid">
+        <div class="loading-state">Loading products...</div>
+      </div>
+
+      <div id="empty-products" class="empty-state" style="display:none;">
+        <div class="empty-icon">▦</div>
+        <h3>No products found</h3>
+        <p>There are currently no products in this category.</p>
       </div>
     </section>
 
-    <!-- PRIVATE ADMIN AREA -->
-    <section class="admin-section" id="admin-section" style="display:none">
-
-      <div class="section-top">
+    <!-- ADMIN DASHBOARD -->
+    <section id="admin-section" class="admin-section" style="display:none;">
+      <div class="section-heading admin-heading">
         <div>
-          <div class="eyebrow orange">BRAT LTD. MANAGEMENT</div>
-          <h1>Admin <em>dashboard.</em></h1>
-          <p class="section-subtitle">
-            Manage incoming orders and service requests.
-          </p>
+          <div class="eyebrow">MANAGEMENT CENTER</div>
+          <h1>Admin <span class="orange">Dashboard.</span></h1>
+          <p class="muted">Manage products and customer requests.</p>
         </div>
 
-        <button class="secondary-button" id="admin-logout" type="button">
-          Sign out
-        </button>
+        <div class="admin-header-actions">
+          <button id="refresh-requests" class="secondary-button" type="button">↻ Refresh</button>
+          <button id="admin-logout" class="secondary-button" type="button">Log out</button>
+        </div>
       </div>
 
       <div class="admin-toolbar">
-        <div>
-          <h2>Incoming requests</h2>
-          <p class="muted small">
-            Orders submitted by customers.
-          </p>
+        <div class="admin-filters">
+          <button class="filter-button active" data-filter="all" type="button">All requests</button>
+          <button class="filter-button" data-filter="pending" type="button">Pending</button>
+          <button class="filter-button" data-filter="accepted" type="button">Accepted</button>
+          <button class="filter-button" data-filter="completed" type="button">Completed</button>
+          <button class="filter-button" data-filter="rejected" type="button">Rejected</button>
         </div>
-
-        <button class="secondary-button" id="admin-refresh" type="button">
-          ↻ Refresh
-        </button>
-      </div>
-
-      <div class="admin-filters">
-        <button class="admin-filter active" data-status="all" type="button">
-          All
-        </button>
-        <button class="admin-filter" data-status="pending" type="button">
-          Pending
-        </button>
-        <button class="admin-filter" data-status="accepted" type="button">
-          Accepted
-        </button>
-        <button class="admin-filter" data-status="completed" type="button">
-          Completed
-        </button>
-        <button class="admin-filter" data-status="rejected" type="button">
-          Rejected
-        </button>
       </div>
 
       <div id="admin-requests" class="admin-requests">
-        <p class="muted">Loading requests...</p>
+        <div class="loading-state">Loading requests...</div>
       </div>
-
-      <p class="small muted" id="admin-status"></p>
-
     </section>
 
   </main>
 
-  <footer>
-    <a class="footer-brand" href="#" data-category="All">
-      BRAT <b>LTD.</b>
-    </a>
-    <span>Independent trading company · KantoBay</span>
-    <span>All prices in <b>KB$</b></span>
+  <footer class="footer">
+    <div class="footer-brand">
+      <span class="brand-mark">B</span>
+      <span class="brand-name">BRAT<span> LTD.</span></span>
+    </div>
+    <p>Built for the KantoBay community.</p>
+    <span class="footer-copyright">© Brat Ltd.</span>
   </footer>
 
   <!-- FLOATING ADMIN BUTTON -->
-  <button
-    class="admin-login-button"
-    id="admin-login-open"
-    type="button"
-    aria-label="Open admin login"
-  >
-    <span class="admin-login-icon">♙</span>
-    <span>Admin Access</span>
+  <button id="admin-login-open" class="admin-floating-button" type="button" title="Admin Login">
+    ⚙
   </button>
 
   <!-- ADMIN LOGIN MODAL -->
-  <div class="modal-backdrop" id="admin-login-modal">
-    <div class="modal">
+  <div id="admin-login-modal" class="modal-backdrop">
+    <div class="modal admin-login-modal">
+      <button class="modal-close" data-close="admin-login-modal" type="button">×</button>
 
-      <button
-        class="icon-button modal-close"
-        id="admin-login-close"
-        type="button"
-        aria-label="Close"
-      >×</button>
-
-      <div class="eyebrow orange">RESTRICTED ACCESS</div>
-      <h2>Admin <em>login.</em></h2>
-
-      <p class="muted">
-        Sign in with your Brat Ltd. administrator account.
-      </p>
+      <div class="modal-eyebrow">BRAT LTD. MANAGEMENT</div>
+      <h2>Admin <span class="orange">Login.</span></h2>
+      <p class="muted">Sign in to manage the marketplace.</p>
 
       <form id="admin-login-form">
+        <label for="admin-email">Email address</label>
+        <input id="admin-email" type="email" placeholder="admin@example.com" required>
 
-        <label>
-          Email address
-          <input
-            id="admin-email"
-            type="email"
-            autocomplete="username"
-            placeholder="Admin email"
-            required
-          >
-        </label>
+        <label for="admin-password">Password</label>
+        <input id="admin-password" type="password" placeholder="Your password" required>
 
-        <label>
-          Password
-          <input
-            id="admin-password"
-            type="password"
-            autocomplete="current-password"
-            placeholder="Password"
-            required
-          >
-        </label>
-
-        <button class="checkout" id="admin-login-submit" type="submit">
-          Sign in <span>→</span>
-        </button>
-
+        <button class="primary-button full-width" type="submit">Sign in</button>
+        <p id="admin-login-message" class="form-message"></p>
       </form>
-
-      <p class="small muted" id="admin-login-status"></p>
-
     </div>
   </div>
 
   <!-- CART OVERLAY -->
-  <div class="overlay" id="overlay"></div>
+  <div id="overlay" class="cart-overlay"></div>
 
-  <!-- SHOPPING CART -->
-  <aside class="cart-panel" id="cart-panel" aria-label="Shopping cart">
-
-    <div class="cart-head">
+  <aside id="cart-panel" class="cart-panel">
+    <div class="cart-header">
       <div>
-        <div class="eyebrow orange">YOUR SELECTION</div>
-        <h2>Shopping cart</h2>
+        <div class="eyebrow">YOUR SELECTION</div>
+        <h2>Your Cart</h2>
       </div>
-
-      <button class="icon-button" id="close-cart" type="button" aria-label="Close cart">×</button>
+      <button id="close-cart" class="modal-close" type="button">×</button>
     </div>
 
     <div id="cart-items" class="cart-items">
-      <p class="empty">Your cart is empty.</p>
-    </div>
-
-    <div class="cart-bottom">
-      <div class="total-line">
-        <span>Subtotal</span>
-        <b id="cart-total">0 KB$</b>
+      <div class="empty-cart">
+        <div class="empty-icon">🛒</div>
+        <p>Your cart is empty.</p>
       </div>
-
-      <p class="muted small">
-        Quantity discounts are automatically applied.
-      </p>
-
-      <button class="checkout" id="checkout" type="button">
-        Proceed to checkout <span>→</span>
-      </button>
     </div>
 
+    <div class="cart-footer">
+      <div id="cart-total" class="cart-total"></div>
+      <button id="checkout" class="primary-button full-width" type="button">
+        Continue to checkout →
+      </button>
+      <p class="cart-disclaimer">All prices are displayed in KB$.</p>
+    </div>
   </aside>
 
   <!-- CHECKOUT MODAL -->
-  <div class="modal-backdrop" id="order-modal">
-    <div class="modal">
+  <div id="order-modal" class="modal-backdrop">
+    <div class="modal checkout-modal">
+      <button class="modal-close" data-close="order-modal" type="button">×</button>
 
-      <button
-        class="icon-button modal-close"
-        id="close-modal"
-        type="button"
-        aria-label="Close"
-      >×</button>
+      <div class="modal-eyebrow">FINAL STEP</div>
+      <h2>Complete your <span class="orange">order.</span></h2>
+      <p class="muted">Please provide your Minecraft name and delivery details.</p>
 
-      <div class="eyebrow orange">FINAL STEP</div>
-      <h2>Order request</h2>
+      <form id="checkout-form">
 
-      <p class="muted">
-        Enter your Minecraft username. No payment will be made yet.
-      </p>
+        <label for="player-name">Minecraft username *</label>
+        <input id="player-name" type="text" maxlength="32" placeholder="Your Minecraft username" required>
 
-      <div id="checkout-total-preview"></div>
+        <div class="form-divider"></div>
 
-      <label>
-        Minecraft username
-        <input
-          id="player-name"
-          maxlength="32"
-          placeholder="Your in-game name"
-        >
-      </label>
+        <div class="form-section-title">Delivery details</div>
 
-      <label>
-        Note <span>(optional)</span>
-        <textarea
-          id="order-note"
-          rows="3"
-          placeholder="For example: Delivery at the Marketplace"
-        ></textarea>
-      </label>
+        <label for="due-date">Desired completion date *</label>
+        <input id="due-date" type="date" required>
 
-      <button class="checkout" id="send-order" type="button">
-        Create order request <span>→</span>
-      </button>
+        <label for="delivery-district">District *</label>
+        <select id="delivery-district" required>
+          <option value="">Select your district</option>
+          <option value="Marktplatz">Marktplatz</option>
+          <option value="Vannenleben">Vannenleben</option>
+          <option value="Kanto">Kanto</option>
+          <option value="Bunkerhausen">Bunkerhausen</option>
+          <option value="Atlantia">Atlantia</option>
+          <option value="Belgische Schlucht">Belgische Schlucht</option>
+          <option value="Hafen">Hafen</option>
+          <option value="Bratmannsdorf">Bratmannsdorf</option>
+          <option value="Stadtmitte">Stadtmitte</option>
+          <option value="Valheim">Valheim</option>
+        </select>
 
-      <p class="small muted" id="order-status"></p>
+        <label for="delivery-address">Exact delivery address *</label>
+        <input id="delivery-address" type="text" maxlength="150" placeholder="Street, building, coordinates..." required>
 
+        <label for="order-note">Additional note (optional)</label>
+        <textarea id="order-note" rows="3" maxlength="1000" placeholder="Any additional information for your order..."></textarea>
+
+        <div class="checkout-summary">
+          <div class="checkout-summary-title">Order summary</div>
+          <div id="checkout-total-preview"></div>
+        </div>
+
+        <button id="send-order" class="primary-button full-width" type="submit">
+          Place order →
+        </button>
+
+        <p id="checkout-message" class="form-message"></p>
+      </form>
     </div>
   </div>
 
+  <!-- SCRIPTS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="app.js"></script>
