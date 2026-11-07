@@ -18,14 +18,6 @@ const categoryIcons = {
   "Services": "⌂"
 };
 
-const categoryDescriptions = {
-  "Blocks": "Building materials and blocks for your next project.",
-  "Items": "Useful items and resources for every adventure.",
-  "Armor & Weapons": "Equipment to protect yourself and fight.",
-  "Enchantments": "Enchantments and enchanted equipment.",
-  "Services": "Custom work and services made for your projects."
-};
-
 const textureAliases = {
   "oak log": "oak_log",
   "oak wood": "oak_log",
@@ -59,9 +51,9 @@ const textureAliases = {
   "shulker box": "shulker_box"
 };
 
-// --------------------------------
+// ----------------------------------
 // GENERAL HELPERS
-// --------------------------------
+// ----------------------------------
 
 function escapeHTML(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -90,18 +82,15 @@ function checkoutMoney(n) {
   return `${Math.ceil(roundMoney(n)).toLocaleString("en-US")} KB$`;
 }
 
-function getDiscountPercent(stackCount) {
-  const quantity = Number(stackCount);
-
+function getDiscountPercent(quantity) {
   if (quantity >= 16) return 15;
   if (quantity >= 10) return 10;
   if (quantity >= 6) return 5;
-
   return 0;
 }
 
-function unitPrice(product, stackCount) {
-  const discount = getDiscountPercent(stackCount);
+function unitPrice(product, quantity) {
+  const discount = getDiscountPercent(quantity);
 
   return roundMoney(
     Number(product.price) * (1 - discount / 100)
@@ -112,9 +101,9 @@ function stackText(product) {
   return `${product.stackSize} items per stack`;
 }
 
-// --------------------------------
+// ----------------------------------
 // MINECRAFT TEXTURES
-// --------------------------------
+// ----------------------------------
 
 function itemTextureId(name) {
   const key = String(name || "").trim().toLowerCase();
@@ -124,9 +113,7 @@ function itemTextureId(name) {
 }
 
 function textureUrl(name, type) {
-  const id = itemTextureId(name);
-
-  return `https://assets.mcasset.cloud/1.21.4/assets/minecraft/textures/${type}/${encodeURIComponent(id)}.png`;
+  return `https://assets.mcasset.cloud/1.21.4/assets/minecraft/textures/${type}/${encodeURIComponent(itemTextureId(name))}.png`;
 }
 
 function imageMarkup(name, cat, cls = "") {
@@ -156,91 +143,16 @@ function imageMarkup(name, cat, cls = "") {
   `;
 }
 
-// --------------------------------
-// NAVIGATION
-// --------------------------------
-
-function selectCategory(newCategory) {
-  category = newCategory;
-
-  document.querySelectorAll("[data-category]").forEach(element => {
-    element.classList.toggle(
-      "active",
-      element.dataset.category === category
-    );
-  });
-
-  $("search").value = "";
-
-  renderPage();
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-}
-
-document.querySelectorAll("[data-category]").forEach(element => {
-  element.addEventListener("click", event => {
-    event.preventDefault();
-    selectCategory(element.dataset.category);
-  });
-});
-
-$("search").addEventListener("input", () => {
-  if (category === "All") {
-    selectCategory("Blocks");
-  } else {
-    renderProducts();
-  }
-});
-
-// --------------------------------
-// PAGE DISPLAY
-// --------------------------------
-
-function renderPage() {
-  const isOverview = category === "All";
-
-  $("offers-section").style.display =
-    isOverview ? "block" : "none";
-
-  $("shop-section").style.display =
-    isOverview ? "none" : "block";
-
-  if (isOverview) {
-    $("search").placeholder = "Search the collection...";
-    return;
-  }
-
-  const title = category === "Armor & Weapons"
-    ? "Armor & <em>Weapons.</em>"
-    : category === "Enchantments"
-      ? "Enchantments."
-      : category === "Services"
-        ? "Our <em>Services.</em>"
-        : `${escapeHTML(category)}.`;
-
-  $("category-title").innerHTML = title;
-
-  $("category-description").textContent =
-    categoryDescriptions[category] || "";
-
-  $("search").placeholder = `Search ${category}...`;
-
-  renderProducts();
-}
-
-// --------------------------------
+// ----------------------------------
 // LOAD PRODUCTS
-// --------------------------------
+// ----------------------------------
 
 async function loadProducts() {
-  $("offers-grid").innerHTML =
-    '<div class="loading-card">Loading featured offers...</div>';
-
   $("products").innerHTML =
     '<p class="muted">Loading products...</p>';
+
+  $("offers-grid").innerHTML =
+    '<div class="loading-card">Loading featured offers...</div>';
 
   const { data, error } = await supabaseClient
     .from("products")
@@ -257,123 +169,139 @@ async function loadProducts() {
     .order("name");
 
   if (error) {
-    console.error("Product loading error:", error);
+    console.error(error);
+
+    $("products").innerHTML =
+      '<p class="muted">Could not load products.</p>';
 
     $("offers-grid").innerHTML =
       '<div class="loading-card">Offers are temporarily unavailable.</div>';
 
-    $("products").innerHTML =
-      '<p class="muted">Could not load products. Please try again later.</p>';
-
     return;
   }
 
-  products = (data || []).map(product => ({
-    id: product.id,
-    name: product.name,
-    category: product.category,
-    desc: product.description || "",
-    price: Number(product.price),
-    stackSize: Number(product.stack_size || 64)
+  products = (data || []).map(p => ({
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    desc: p.description || "",
+    price: Number(p.price),
+    stackSize: Number(p.stack_size || 64)
   }));
 
   renderOffers();
-  renderPage();
+  renderProducts();
   renderCart();
 }
 
-// --------------------------------
-// FEATURED OFFERS
-// --------------------------------
+// ----------------------------------
+// OVERVIEW: OFFERS ONLY
+// ----------------------------------
 
 function renderOffers() {
-  const selected = products.slice(0, 3);
+  const q = $("search").value.toLowerCase().trim();
+
+  const selected = products
+    .filter(p =>
+      (p.name + " " + p.category + " " + p.desc)
+        .toLowerCase()
+        .includes(q)
+    )
+    .slice(0, 3);
 
   $("offers-grid").innerHTML = selected.length
-    ? selected.map(product => `
+    ? selected.map(p => `
       <article class="offer-card">
         <div class="offer-image">
-          ${imageMarkup(product.name, product.category)}
+          ${imageMarkup(p.name, p.category)}
         </div>
 
         <div class="offer-copy">
           <div class="offer-kicker">QUANTITY DEAL</div>
 
-          <h3>${escapeHTML(product.name)}</h3>
+          <h3>${escapeHTML(p.name)}</h3>
 
           <div class="offer-price">
-            ${money(product.price)} <small>/ stack</small>
+            ${money(p.price)} <small>/ stack</small>
           </div>
 
-          <small>${stackText(product)}</small>
+          <small>${stackText(p)}</small>
         </div>
 
         <span class="offer-badge">OFFER</span>
       </article>
     `).join("")
-    : '<div class="loading-card">No products are available yet. Check back soon.</div>';
+    : '<div class="loading-card">No offers found.</div>';
 }
 
-// --------------------------------
-// PRODUCT DISPLAY
-// --------------------------------
+// ----------------------------------
+// CATEGORY DISPLAY
+// ----------------------------------
 
 function renderProducts() {
+  const isHome = category === "All";
+
+  // WICHTIG: Die echten IDs aus deiner index.html verwenden
+  $("offers").style.display = isHome ? "" : "none";
+  $("shop").style.display = isHome ? "none" : "";
+
+  // Andere Startseiten-Bereiche ausblenden
+  document.querySelector(".hero").style.display = "none";
+  document.querySelector(".value-strip").style.display = "none";
+  document.querySelector(".trade-note").style.display = "none";
+
+  // Auf Overview ausschließlich Angebote
+  if (isHome) {
+    $("products").innerHTML = "";
+    $("result-count").textContent = "";
+    return;
+  }
+
   const q = $("search").value.toLowerCase().trim();
 
-  const shown = products.filter(product =>
-    product.category === category &&
-    (
-      product.name + " " +
-      product.category + " " +
-      product.desc
-    ).toLowerCase().includes(q)
+  const shown = products.filter(p =>
+    p.category === category &&
+    (p.name + " " + p.category + " " + p.desc)
+      .toLowerCase()
+      .includes(q)
   );
 
-  $("result-count").textContent =
-    `${shown.length} products`;
+  $("result-count").textContent = `${shown.length} products`;
 
-  let html = shown.map(product => `
+  let html = shown.map(p => `
     <article class="product-card">
-
       <div class="product-visual">
-        <span class="product-tag">
-          ${escapeHTML(product.category)}
-        </span>
-
-        ${imageMarkup(product.name, product.category)}
+        <span class="product-tag">${escapeHTML(p.category)}</span>
+        ${imageMarkup(p.name, p.category)}
       </div>
 
       <div class="product-info">
-        <h3>${escapeHTML(product.name)}</h3>
+        <h3>${escapeHTML(p.name)}</h3>
 
-        <p>${escapeHTML(product.desc)}</p>
+        <p>${escapeHTML(p.desc)}</p>
 
         <div class="price-row">
           <div class="price">
-            ${money(product.price)}
-            <small>/ stack</small>
+            ${money(p.price)} <small>/ stack</small>
           </div>
 
           <button
             class="add-button"
-            data-add="${escapeHTML(product.id)}"
-            aria-label="Add ${escapeHTML(product.name)} to cart"
+            data-add="${escapeHTML(p.id)}"
+            aria-label="Add one stack of ${escapeHTML(p.name)} to cart"
           >+</button>
         </div>
 
-        <small class="stack-info">
-          ${stackText(product)}
-        </small>
+        <small class="stack-info">${stackText(p)}</small>
 
         <div class="discount-note">
           ↘ Quantity discounts: up to 15%
         </div>
       </div>
-
     </article>
   `).join("");
 
+  // Das Formular erscheint ausschließlich bei Services
   if (category === "Services") {
     html += serviceFormMarkup();
   }
@@ -385,9 +313,9 @@ function renderProducts() {
   $("products").innerHTML = html;
 
   document.querySelectorAll("[data-add]").forEach(button => {
-    button.addEventListener("click", () => {
-      addToCart(button.dataset.add);
-    });
+    button.addEventListener("click", () =>
+      addToCart(button.dataset.add)
+    );
   });
 
   const form = $("service-form");
@@ -397,32 +325,29 @@ function renderProducts() {
   }
 }
 
-// --------------------------------
-// SERVICE FORM
-// --------------------------------
+// ----------------------------------
+// SERVICE REQUEST FORM
+// ----------------------------------
 
 function serviceFormMarkup() {
   return `
     <section class="service-request-card">
 
       <div class="service-request-header">
-        <div class="eyebrow orange">
-          MADE FOR YOUR PROJECT
-        </div>
+        <div class="eyebrow orange">MADE FOR YOUR PROJECT</div>
 
-        <h2>Request a <em>custom service.</em></h2>
+        <h3>Request a <em>custom service.</em></h3>
 
         <p>
-          Need something special? Describe your idea,
-          add reference images and suggest your own price.
+          Need something special? Describe your idea and
+          make your own price proposal.
         </p>
       </div>
 
       <form id="service-form">
 
-        <div class="service-field">
-          <label for="service-title">Service title</label>
-
+        <label class="service-label">
+          Service title
           <input
             id="service-title"
             type="text"
@@ -430,60 +355,43 @@ function serviceFormMarkup() {
             placeholder="e.g. Custom medieval castle"
             required
           >
-        </div>
+        </label>
 
-        <div class="service-field">
-          <label for="service-description">Description</label>
-
+        <label class="service-label">
+          Description
           <textarea
             id="service-description"
-            rows="6"
+            rows="5"
             maxlength="3000"
             placeholder="Describe exactly what you need..."
             required
           ></textarea>
-        </div>
+        </label>
 
-        <div class="service-field">
-          <label for="service-link">
-            Reference link <span>Optional</span>
-          </label>
-
+        <label class="service-label">
+          Reference link <span>(optional)</span>
           <input
             id="service-link"
             type="url"
             maxlength="500"
             placeholder="https://..."
           >
-        </div>
+        </label>
 
-        <div class="service-field">
-          <label for="service-images">
-            Reference images <span>Optional · Maximum 5 images</span>
-          </label>
-
+        <label class="service-label">
+          Images <span>(optional, max. 5 images, 5 MB each)</span>
           <input
             id="service-images"
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif"
             multiple
           >
+        </label>
 
-          <div class="field-help">
-            PNG, JPG, WEBP or GIF · Maximum 5 MB per image
-          </div>
-        </div>
+        <div id="service-image-preview" class="service-image-preview"></div>
 
-        <div
-          id="service-image-preview"
-          class="service-image-preview"
-        ></div>
-
-        <div class="service-field">
-          <label for="service-price">
-            Your proposed price <span>KB$</span>
-          </label>
-
+        <label class="service-label">
+          Your proposed price (KB$)
           <input
             id="service-price"
             type="number"
@@ -493,18 +401,18 @@ function serviceFormMarkup() {
             placeholder="e.g. 150"
             required
           >
-        </div>
+        </label>
 
-        <div class="service-disclaimer">
+        <p class="service-disclaimer">
           Your proposed price will be reviewed by Brat Ltd.
           before the service is accepted.
-        </div>
+        </p>
 
-        <button type="submit" class="service-submit">
+        <button type="submit" class="checkout">
           Add service request to cart <span>→</span>
         </button>
 
-        <p id="service-status" class="service-status"></p>
+        <p id="service-status" class="small muted"></p>
 
       </form>
     </section>
@@ -516,19 +424,15 @@ document.addEventListener("change", event => {
   if (event.target.id !== "service-images") return;
 
   const preview = $("service-image-preview");
-  const status = $("service-status");
   const files = Array.from(event.target.files || []);
 
   if (!preview) return;
 
   preview.innerHTML = "";
 
-  if (status) status.textContent = "";
-
   if (files.length > 5) {
-    if (status) {
-      status.textContent = "Please select a maximum of 5 images.";
-    }
+    $("service-status").textContent =
+      "Please select a maximum of 5 images.";
 
     event.target.value = "";
     return;
@@ -537,40 +441,23 @@ document.addEventListener("change", event => {
   files.forEach(file => {
     if (!file.type.startsWith("image/")) return;
 
-    const wrapper = document.createElement("div");
-    wrapper.className = "preview-image";
-
     const img = document.createElement("img");
     img.alt = file.name;
     img.src = URL.createObjectURL(file);
 
-    const label = document.createElement("span");
-    label.textContent = file.name;
-
-    wrapper.appendChild(img);
-    wrapper.appendChild(label);
-    preview.appendChild(wrapper);
+    preview.appendChild(img);
   });
 });
 
-// --------------------------------
-// UPLOAD SERVICE IMAGES
-// --------------------------------
-
+// Upload images
 async function uploadServiceImages(files) {
   const urls = [];
 
   for (const file of files) {
-    const safeName = file.name.replace(
-      /[^a-zA-Z0-9._-]/g,
-      "_"
-    );
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
 
-    const uniqueId = window.crypto?.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-    const filePath = `${uniqueId}-${safeName}`;
+    const filePath =
+      `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
     const { error } = await supabaseClient.storage
       .from("service-attachments")
@@ -595,16 +482,11 @@ async function uploadServiceImages(files) {
   return urls;
 }
 
-// --------------------------------
-// ADD SERVICE TO CART
-// --------------------------------
-
+// Add service request
 async function handleServiceSubmit(event) {
   event.preventDefault();
 
   const status = $("service-status");
-  const button = event.submitter;
-
   const title = $("service-title").value.trim();
   const description = $("service-description").value.trim();
   const link = $("service-link").value.trim();
@@ -612,8 +494,7 @@ async function handleServiceSubmit(event) {
   const files = Array.from($("service-images").files || []);
 
   if (!title || !description) {
-    status.textContent =
-      "Please complete the title and description.";
+    status.textContent = "Please complete the title and description.";
     return;
   }
 
@@ -623,8 +504,7 @@ async function handleServiceSubmit(event) {
   }
 
   if (files.length > 5) {
-    status.textContent =
-      "You can upload a maximum of 5 images.";
+    status.textContent = "You can upload a maximum of 5 images.";
     return;
   }
 
@@ -662,17 +542,18 @@ async function handleServiceSubmit(event) {
     }
   }
 
+  const button = event.submitter;
+
   button.disabled = true;
   button.textContent = "Uploading images...";
 
-  status.textContent =
-    "Please wait while your images are uploaded.";
+  status.textContent = "Please wait while your images are uploaded.";
 
   try {
     const imageUrls = await uploadServiceImages(files);
 
-    const serviceId = `service_${Date.now()}_${Math.random()
-      .toString(36).slice(2, 8)}`;
+    const serviceId =
+      `service_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     cart[serviceId] = {
       type: "service",
@@ -687,14 +568,13 @@ async function handleServiceSubmit(event) {
     renderCart();
     openCart();
 
+    status.textContent = "Service request added to your cart.";
+
     $("service-form").reset();
     $("service-image-preview").innerHTML = "";
 
-    status.textContent =
-      "Service request added to your cart.";
-
   } catch (error) {
-    console.error("Service upload error:", error);
+    console.error(error);
 
     status.textContent =
       error.message || "Something went wrong. Please try again.";
@@ -706,59 +586,40 @@ async function handleServiceSubmit(event) {
   }
 }
 
-// --------------------------------
-// CART STORAGE AND ENTRIES
-// --------------------------------
+// ----------------------------------
+// CART
+// ----------------------------------
 
 function saveCart() {
   localStorage.setItem("bratCart", JSON.stringify(cart));
 }
 
 function getCartEntries() {
-  return Object.entries(cart)
-    .filter(([id, item]) => {
-      if (
-        item &&
-        typeof item === "object" &&
-        item.type === "service"
-      ) {
-        return Number(item.price) > 0;
-      }
+  return Object.entries(cart).filter(([id, item]) => {
+    if (item && typeof item === "object" && item.type === "service") {
+      return Number(item.price) > 0;
+    }
 
-      return products.some(product =>
-        String(product.id) === String(id)
-      ) && Number(item) > 0;
-    })
-    .map(([id, item]) => {
-      if (
-        item &&
-        typeof item === "object" &&
-        item.type === "service"
-      ) {
-        return {
-          id,
-          type: "service",
-          service: item,
-          quantity: 1
-        };
-      }
-
-      const product = products.find(p =>
-        String(p.id) === String(id)
-      );
-
+    return products.some(p => String(p.id) === String(id)) &&
+      Number(item) > 0;
+  }).map(([id, item]) => {
+    if (item && typeof item === "object" && item.type === "service") {
       return {
         id,
-        type: "product",
-        product,
-        quantity: Number(item)
+        type: "service",
+        service: item,
+        quantity: 1
       };
-    });
-}
+    }
 
-// --------------------------------
-// PRODUCT CART ACTIONS
-// --------------------------------
+    return {
+      id,
+      type: "product",
+      product: products.find(p => String(p.id) === String(id)),
+      quantity: Number(item)
+    };
+  });
+}
 
 function addToCart(id) {
   cart[id] = (Number(cart[id]) || 0) + 1;
@@ -786,10 +647,6 @@ function removeService(id) {
   renderCart();
 }
 
-// --------------------------------
-// CART TOTALS
-// --------------------------------
-
 function getCartTotals() {
   const entries = getCartEntries();
 
@@ -803,73 +660,48 @@ function getCartTotals() {
       return;
     }
 
-    const product = entry.product;
+    const p = entry.product;
     const quantity = entry.quantity;
 
-    total += unitPrice(product, quantity) * quantity;
-    originalTotal += Number(product.price) * quantity;
+    total += unitPrice(p, quantity) * quantity;
+    originalTotal += Number(p.price) * quantity;
   });
 
   total = roundMoney(total);
   originalTotal = roundMoney(originalTotal);
 
-  const savings = roundMoney(originalTotal - total);
-
   return {
     entries,
     total,
     originalTotal,
-    savings,
+    savings: roundMoney(originalTotal - total),
     checkoutTotal: Math.ceil(total)
   };
 }
-
-// --------------------------------
-// RENDER CART
-// --------------------------------
 
 function renderCart() {
   const entries = getCartEntries();
 
   let totalStacks = 0;
-  let serviceCount = 0;
 
   $("cart-items").innerHTML = entries.length
     ? entries.map(entry => {
         if (entry.type === "service") {
-          const service = entry.service;
-          serviceCount++;
+          const s = entry.service;
 
           return `
             <div class="cart-line service-cart-line">
               <div>
-                <strong>${escapeHTML(service.title)}</strong>
-
+                <strong>${escapeHTML(s.title)}</strong>
                 <small>CUSTOM SERVICE REQUEST</small>
+                <small>${money(s.price)} · Proposed price</small>
+                <small>${escapeHTML(s.description)}</small>
 
-                <small>
-                  ${money(service.price)} · Proposed price
-                </small>
-
-                <small>
-                  ${escapeHTML(service.description)}
-                </small>
-
-                ${service.link ? `
-                  <small>
-                    Reference:
-                    <a
-                      href="${escapeHTML(service.link)}"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >Open link</a>
-                  </small>
+                ${s.link ? `
+                  <small>Reference: ${escapeHTML(s.link)}</small>
                 ` : ""}
 
-                <small>
-                  ${service.imageUrls.length} attached image(s)
-                </small>
-
+                <small>${s.imageUrls.length} attached image(s)</small>
                 <small class="cart-discount">
                   Subject to approval by Brat Ltd.
                 </small>
@@ -885,60 +717,44 @@ function renderCart() {
           `;
         }
 
-        const product = entry.product;
+        const p = entry.product;
         const quantity = entry.quantity;
-
         const discount = getDiscountPercent(quantity);
-        const price = unitPrice(product, quantity);
+        const price = unitPrice(p, quantity);
 
         const sum = roundMoney(price * quantity);
-        const originalSum = roundMoney(
-          Number(product.price) * quantity
-        );
+        const originalSum = roundMoney(Number(p.price) * quantity);
         const saved = roundMoney(originalSum - sum);
-
-        const itemCount = quantity * product.stackSize;
 
         totalStacks += quantity;
 
         return `
           <div class="cart-line">
             <div>
-              <strong>${escapeHTML(product.name)}</strong>
+              <strong>${escapeHTML(p.name)}</strong>
 
               <small>
                 ${money(price)} per stack · ${money(sum)} total
               </small>
 
               <small>
-                ${quantity} stacks · ${itemCount} items
+                ${quantity} stacks · ${quantity * p.stackSize} items
               </small>
 
               ${discount > 0 ? `
                 <small class="cart-discount">
                   ${discount}% discount · You save ${money(saved)}
                 </small>
-
-                <small>
-                  Regular price: ${money(originalSum)}
-                </small>
+                <small>Regular price: ${money(originalSum)}</small>
               ` : `
                 <small>No discount yet</small>
               `}
             </div>
 
             <div class="qty">
-              <button
-                data-change="${escapeHTML(entry.id)}"
-                data-delta="-1"
-              >−</button>
-
+              <button data-change="${escapeHTML(entry.id)}" data-delta="-1">−</button>
               <b>${quantity}</b>
-
-              <button
-                data-change="${escapeHTML(entry.id)}"
-                data-delta="1"
-              >+</button>
+              <button data-change="${escapeHTML(entry.id)}" data-delta="1">+</button>
             </div>
           </div>
         `;
@@ -947,30 +763,35 @@ function renderCart() {
 
   const totals = getCartTotals();
 
-  $("cart-count").textContent =
-    totalStacks + serviceCount;
+  const serviceCount =
+    totals.entries.filter(e => e.type === "service").length;
 
+  $("cart-count").textContent = totalStacks + serviceCount;
   $("cart-total").textContent = money(totals.total);
 
+  if ($("cart-savings")) {
+    $("cart-savings").textContent = money(totals.savings);
+  }
+
   document.querySelectorAll("[data-change]").forEach(button => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", () =>
       changeQty(
         button.dataset.change,
         Number(button.dataset.delta)
-      );
-    });
+      )
+    );
   });
 
   document.querySelectorAll("[data-remove-service]").forEach(button => {
-    button.addEventListener("click", () => {
-      removeService(button.dataset.removeService);
-    });
+    button.addEventListener("click", () =>
+      removeService(button.dataset.removeService)
+    );
   });
 }
 
-// --------------------------------
+// ----------------------------------
 // CART PANEL
-// --------------------------------
+// ----------------------------------
 
 function openCart() {
   $("cart-panel").classList.add("open");
@@ -982,13 +803,69 @@ function closeCart() {
   $("overlay").classList.remove("show");
 }
 
-$("open-cart").addEventListener("click", openCart);
-$("close-cart").addEventListener("click", closeCart);
-$("overlay").addEventListener("click", closeCart);
+// ----------------------------------
+// NAVIGATION
+// ----------------------------------
 
-// --------------------------------
+function selectCategory(selectedCategory) {
+  category = selectedCategory;
+
+  document.querySelectorAll("[data-category]").forEach(element => {
+    element.classList.toggle(
+      "active",
+      element.dataset.category === category
+    );
+  });
+
+  renderProducts();
+
+  // Zur richtigen Seite scrollen
+  const target = category === "All" ? $("offers") : $("shop");
+
+  target.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+}
+
+document.querySelectorAll(".nav-link, .text-link").forEach(element => {
+  if (!element.dataset.category) return;
+
+  element.addEventListener("click", event => {
+    event.preventDefault();
+    selectCategory(element.dataset.category);
+  });
+});
+
+// ----------------------------------
+// SEARCH
+// ----------------------------------
+
+$("search").addEventListener("input", () => {
+  if (category === "All") {
+    renderOffers();
+  } else {
+    renderProducts();
+  }
+});
+
+// ----------------------------------
+// BUTTONS
+// ----------------------------------
+
+$("open-cart").onclick = openCart;
+$("close-cart").onclick = closeCart;
+$("overlay").onclick = closeCart;
+
+$("checkout").onclick = showCheckoutTotal;
+
+$("close-modal").onclick = () => {
+  $("order-modal").classList.remove("show");
+};
+
+// ----------------------------------
 // CHECKOUT
-// --------------------------------
+// ----------------------------------
 
 function showCheckoutTotal() {
   const {
@@ -1005,39 +882,38 @@ function showCheckoutTotal() {
     return;
   }
 
+  let preview = $("checkout-total-preview");
+
+  if (!preview) {
+    preview = document.createElement("div");
+    preview.id = "checkout-total-preview";
+
+    const firstInput = $("player-name");
+
+    if (firstInput && firstInput.parentElement) {
+      firstInput.parentElement.insertBefore(
+        preview,
+        firstInput
+      );
+    } else {
+      $("order-modal").prepend(preview);
+    }
+  }
+
   const serviceCount =
-    entries.filter(entry => entry.type === "service").length;
+    entries.filter(e => e.type === "service").length;
 
-  $("checkout-total-preview").innerHTML = `
+  preview.innerHTML = `
     <div class="checkout-summary">
-
-      <div>
-        Original total:
-        <strong>${money(originalTotal)}</strong>
-      </div>
-
-      <div>
-        Quantity discount:
-        <strong>−${money(savings)}</strong>
-      </div>
-
-      <div>
-        Discounted total:
-        <strong>${money(total)}</strong>
-      </div>
-
-      <div>
-        Custom service requests:
-        <strong>${serviceCount}</strong>
-      </div>
-
+      <div>Original total: <strong>${money(originalTotal)}</strong></div>
+      <div>Quantity discount: <strong>−${money(savings)}</strong></div>
+      <div>Discounted total: <strong>${money(total)}</strong></div>
+      <div>Custom service requests: <strong>${serviceCount}</strong></div>
       <hr>
-
       <div>
         Final total (rounded up):
         <strong>${checkoutMoney(checkoutTotal)}</strong>
       </div>
-
     </div>
   `;
 
@@ -1045,17 +921,11 @@ function showCheckoutTotal() {
   $("order-modal").classList.add("show");
 }
 
-$("checkout").addEventListener("click", showCheckoutTotal);
-
-$("close-modal").addEventListener("click", () => {
-  $("order-modal").classList.remove("show");
-});
-
-// --------------------------------
+// ----------------------------------
 // CREATE ORDER FILE
-// --------------------------------
+// ----------------------------------
 
-$("send-order").addEventListener("click", () => {
+$("send-order").onclick = () => {
   const name = $("player-name").value.trim();
 
   if (!name) {
@@ -1079,45 +949,38 @@ $("send-order").addEventListener("click", () => {
 
   const lines = entries.map(entry => {
     if (entry.type === "service") {
-      const service = entry.service;
+      const s = entry.service;
 
       return `
 CUSTOM SERVICE REQUEST
-Title: ${service.title}
+Title: ${s.title}
 
 Description:
-${service.description}
+${s.description}
 
-Proposed price: ${money(service.price)}
+Proposed price: ${money(s.price)}
 Approval: Pending review by Brat Ltd.
 
 Reference link:
-${service.link || "None"}
+${s.link || "None"}
 
 Images:
-${service.imageUrls.length
-  ? service.imageUrls.join("\n")
-  : "None"}
+${s.imageUrls.length ? s.imageUrls.join("\n") : "None"}
       `.trim();
     }
 
-    const product = entry.product;
+    const p = entry.product;
     const quantity = entry.quantity;
-
     const discount = getDiscountPercent(quantity);
-    const price = unitPrice(product, quantity);
+    const price = unitPrice(p, quantity);
 
     const sum = roundMoney(price * quantity);
-    const originalSum = roundMoney(
-      Number(product.price) * quantity
-    );
+    const originalSum = roundMoney(Number(p.price) * quantity);
     const saved = roundMoney(originalSum - sum);
 
-    const itemCount = quantity * product.stackSize;
-
     return `
-${product.name}
-${quantity} stacks (${itemCount} items)
+${p.name}
+${quantity} stacks (${quantity * p.stackSize} items)
 Price: ${money(sum)}
 Discount: ${discount}%
 Saved: ${money(saved)}
@@ -1146,23 +1009,22 @@ Custom service prices are proposed prices and require approval by Brat Ltd.`;
   });
 
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  const a = document.createElement("a");
 
-  link.href = url;
-  link.download =
+  a.href = url;
+  a.download =
     `Brat-Ltd-Order-${name.replace(/[^a-z0-9_-]/gi, "_")}.txt`;
 
-  link.click();
-
+  a.click();
   URL.revokeObjectURL(url);
 
   $("order-status").textContent =
     "Order request created as a text file. It has not been submitted automatically.";
-});
+};
 
-// --------------------------------
+// ----------------------------------
 // START
-// --------------------------------
+// ----------------------------------
 
 renderCart();
 loadProducts();
