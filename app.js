@@ -11,6 +11,9 @@ let cart = JSON.parse(localStorage.getItem("bratCart") || "{}");
 let currentSession = null;
 let isAdmin = false;
 let requests = [];
+let adminDashboardOpen = false;
+let currentRequestFilter = "all";
+let authCheckRun = 0;
 
 const $ = id => document.getElementById(id);
 
@@ -70,7 +73,7 @@ function escapeHTML(value) {
 }
 
 function money(n) {
-  return `${Number(n).toLocaleString("en-US", {
+  return `${Number(n || 0).toLocaleString("en-US", {
     minimumFractionDigits: 1,
     maximumFractionDigits: 3
   })} KB$`;
@@ -103,6 +106,11 @@ function unitPrice(product, quantity) {
 
 function stackText(product) {
   return `${product.stackSize} items per stack`;
+}
+
+function setText(id, value) {
+  const element = $(id);
+  if (element) element.textContent = value;
 }
 
 // ----------------------------------
@@ -173,7 +181,7 @@ async function loadProducts() {
     .order("name");
 
   if (error) {
-    console.error(error);
+    console.error("Product loading failed:", error);
 
     $("products").innerHTML =
       '<p class="muted">Could not load products.</p>';
@@ -242,20 +250,13 @@ function renderOffers() {
 // ----------------------------------
 
 function renderProducts() {
+  if (adminDashboardOpen) return;
+
   const isHome = category === "All";
 
   $("offers").style.display = isHome ? "" : "none";
-  $("shop").style.display =
-    !isHome && category !== "Requests" ? "" : "none";
-
-  $("requests-section").style.display =
-    category === "Requests" && isAdmin ? "" : "none";
-
-  if (category === "Requests") {
-    $("products").innerHTML = "";
-    $("result-count").textContent = "";
-    return;
-  }
+  $("shop").style.display = !isHome ? "" : "none";
+  $("admin-section").style.display = "none";
 
   if (isHome) {
     $("products").innerHTML = "";
@@ -294,6 +295,7 @@ function renderProducts() {
             class="add-button"
             data-add="${escapeHTML(p.id)}"
             aria-label="Add one stack of ${escapeHTML(p.name)} to cart"
+            type="button"
           >+</button>
         </div>
 
@@ -424,7 +426,7 @@ function serviceFormMarkup() {
 }
 
 // ----------------------------------
-// IMAGE PREVIEW
+// SERVICE IMAGE PREVIEW
 // ----------------------------------
 
 document.addEventListener("change", event => {
@@ -438,9 +440,7 @@ document.addEventListener("change", event => {
   preview.innerHTML = "";
 
   if (files.length > 5) {
-    $("service-status").textContent =
-      "Please select a maximum of 5 images.";
-
+    setText("service-status", "Please select a maximum of 5 images.");
     event.target.value = "";
     return;
   }
@@ -465,7 +465,6 @@ async function uploadServiceImages(files) {
 
   for (const file of files) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-
     const filePath =
       `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
@@ -556,10 +555,8 @@ async function handleServiceSubmit(event) {
   }
 
   const button = event.submitter;
-
   button.disabled = true;
   button.textContent = "Uploading images...";
-
   status.textContent = "Please wait while your images are uploaded.";
 
   try {
@@ -588,7 +585,6 @@ async function handleServiceSubmit(event) {
 
   } catch (error) {
     console.error(error);
-
     status.textContent =
       error.message || "Something went wrong. Please try again.";
 
@@ -600,7 +596,7 @@ async function handleServiceSubmit(event) {
 }
 
 // ----------------------------------
-// CART
+// CART HELPERS
 // ----------------------------------
 
 function saveCart() {
@@ -620,7 +616,10 @@ function getCartEntries() {
       return {
         id,
         type: "service",
-        service: item,
+        service: {
+          ...item,
+          imageUrls: Array.isArray(item.imageUrls) ? item.imageUrls : []
+        },
         quantity: 1
       };
     }
@@ -636,7 +635,6 @@ function getCartEntries() {
 
 function addToCart(id) {
   cart[id] = (Number(cart[id]) || 0) + 1;
-
   saveCart();
   renderCart();
   openCart();
@@ -655,7 +653,6 @@ function changeQty(id, delta) {
 
 function removeService(id) {
   delete cart[id];
-
   saveCart();
   renderCart();
 }
@@ -692,9 +689,12 @@ function getCartTotals() {
   };
 }
 
+// ----------------------------------
+// RENDER CART
+// ----------------------------------
+
 function renderCart() {
   const entries = getCartEntries();
-
   let totalStacks = 0;
 
   $("cart-items").innerHTML = entries.length
@@ -725,6 +725,7 @@ function renderCart() {
                 <button
                   data-remove-service="${escapeHTML(entry.id)}"
                   aria-label="Remove service"
+                  type="button"
                 >×</button>
               </div>
             </div>
@@ -766,9 +767,9 @@ function renderCart() {
             </div>
 
             <div class="qty">
-              <button data-change="${escapeHTML(entry.id)}" data-delta="-1">−</button>
+              <button data-change="${escapeHTML(entry.id)}" data-delta="-1" type="button">−</button>
               <b>${quantity}</b>
-              <button data-change="${escapeHTML(entry.id)}" data-delta="1">+</button>
+              <button data-change="${escapeHTML(entry.id)}" data-delta="1" type="button">+</button>
             </div>
           </div>
         `;
@@ -776,7 +777,6 @@ function renderCart() {
     : '<p class="empty">Your cart is empty.</p>';
 
   const totals = getCartTotals();
-
   const serviceCount =
     totals.entries.filter(e => e.type === "service").length;
 
@@ -821,15 +821,13 @@ function closeCart() {
 // NAVIGATION
 // ----------------------------------
 
-function selectCategory(selectedCategory) {
-  if (selectedCategory === "Requests" && !isAdmin) {
-    selectCategory("All");
-    return;
-  }
-
+function showShopCategory(selectedCategory) {
+  adminDashboardOpen = false;
   category = selectedCategory;
 
-  document.querySelectorAll("[data-category]").forEach(element => {
+  $("admin-section").style.display = "none";
+
+  document.querySelectorAll(".nav-link").forEach(element => {
     element.classList.toggle(
       "active",
       element.dataset.category === category
@@ -837,15 +835,6 @@ function selectCategory(selectedCategory) {
   });
 
   renderProducts();
-
-  if (category === "Requests") {
-    loadRequests();
-    $("requests-section").scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
-    return;
-  }
 
   const target = category === "All" ? $("offers") : $("shop");
 
@@ -855,12 +844,31 @@ function selectCategory(selectedCategory) {
   });
 }
 
-document.querySelectorAll(".nav-link, .text-link").forEach(element => {
-  if (!element.dataset.category) return;
+function showAdminDashboard() {
+  if (!isAdmin) return;
 
+  adminDashboardOpen = true;
+
+  $("offers").style.display = "none";
+  $("shop").style.display = "none";
+  $("admin-section").style.display = "block";
+
+  document.querySelectorAll(".nav-link").forEach(element => {
+    element.classList.remove("active");
+  });
+
+  $("admin-section").scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+
+  loadRequests();
+}
+
+document.querySelectorAll("[data-category]").forEach(element => {
   element.addEventListener("click", event => {
     event.preventDefault();
-    selectCategory(element.dataset.category);
+    showShopCategory(element.dataset.category);
   });
 });
 
@@ -869,9 +877,11 @@ document.querySelectorAll(".nav-link, .text-link").forEach(element => {
 // ----------------------------------
 
 $("search").addEventListener("input", () => {
+  if (adminDashboardOpen) return;
+
   if (category === "All") {
     renderOffers();
-  } else if (category !== "Requests") {
+  } else {
     renderProducts();
   }
 });
@@ -880,27 +890,30 @@ $("search").addEventListener("input", () => {
 // BUTTONS
 // ----------------------------------
 
-$("open-cart").onclick = openCart;
-$("close-cart").onclick = closeCart;
-$("overlay").onclick = closeCart;
+$("open-cart").addEventListener("click", openCart);
+$("close-cart").addEventListener("click", closeCart);
+$("overlay").addEventListener("click", closeCart);
 
-$("checkout").onclick = showCheckoutTotal;
+$("checkout").addEventListener("click", showCheckoutTotal);
 
-$("close-modal").onclick = () => {
+$("close-modal").addEventListener("click", () => {
   $("order-modal").classList.remove("show");
-};
+});
 
-$("admin-login-open").onclick = () => {
-  $("admin-login-modal").classList.add("show");
-};
+$("admin-login-open").addEventListener("click", () => {
+  if (isAdmin) {
+    showAdminDashboard();
+  } else {
+    $("admin-login-modal").classList.add("show");
+  }
+});
 
-$("admin-login-close").onclick = () => {
+$("admin-login-close").addEventListener("click", () => {
   $("admin-login-modal").classList.remove("show");
-};
+});
 
-$("refresh-requests").onclick = loadRequests;
-
-$("admin-logout").onclick = logoutAdmin;
+$("admin-refresh").addEventListener("click", loadRequests);
+$("admin-logout").addEventListener("click", logoutAdmin);
 
 // ----------------------------------
 // CHECKOUT
@@ -941,14 +954,15 @@ function showCheckoutTotal() {
   `;
 
   $("order-status").textContent = "";
+  $("order-status").style.color = "";
   $("order-modal").classList.add("show");
 }
 
 // ----------------------------------
-// SAVE ORDER TO SUPABASE
+// SUBMIT ORDER TO SUPABASE
 // ----------------------------------
 
-$("send-order").onclick = submitOrder;
+$("send-order").addEventListener("click", submitOrder);
 
 async function submitOrder() {
   const button = $("send-order");
@@ -1055,9 +1069,8 @@ async function submitOrder() {
 
   button.disabled = true;
   button.textContent = "Submitting order...";
-
-  $("order-status").textContent =
-    "Saving your order request...";
+  $("order-status").textContent = "Saving your order request...";
+  $("order-status").style.color = "";
 
   try {
     const { error } = await supabaseClient
@@ -1072,7 +1085,6 @@ async function submitOrder() {
 
     $("order-status").textContent =
       "Your order has been submitted successfully!";
-
     $("order-status").style.color = "#65c98a";
 
     $("player-name").value = "";
@@ -1089,13 +1101,12 @@ async function submitOrder() {
 
     $("order-status").textContent =
       `Could not submit order: ${error.message}`;
-
     $("order-status").style.color = "#e47766";
 
   } finally {
     button.disabled = false;
     button.innerHTML =
-      'Submit order request <span>→</span>';
+      'Create order request <span>→</span>';
   }
 }
 
@@ -1112,15 +1123,11 @@ $("admin-login-form").addEventListener("submit", async event => {
 
   button.disabled = true;
   button.textContent = "Signing in...";
-
   $("admin-login-status").textContent = "";
 
   try {
     const { data, error } = await supabaseClient.auth
-      .signInWithPassword({
-        email,
-        password
-      });
+      .signInWithPassword({ email, password });
 
     if (error) throw error;
 
@@ -1133,7 +1140,6 @@ $("admin-login-form").addEventListener("submit", async event => {
 
       currentSession = null;
       isAdmin = false;
-
       updateAdminUI();
 
       throw new Error(
@@ -1141,15 +1147,15 @@ $("admin-login-form").addEventListener("submit", async event => {
       );
     }
 
+    isAdmin = true;
     $("admin-login-modal").classList.remove("show");
     $("admin-login-form").reset();
 
     updateAdminUI();
-    selectCategory("Requests");
+    showAdminDashboard();
 
   } catch (error) {
-    console.error(error);
-
+    console.error("Admin login failed:", error);
     $("admin-login-status").textContent = error.message;
 
   } finally {
@@ -1178,54 +1184,46 @@ async function checkAdmin(userId) {
 }
 
 function updateAdminUI() {
-  document.querySelectorAll(".admin-only").forEach(element => {
-    element.style.display = isAdmin ? "" : "none";
-  });
+  const button = $("admin-login-open");
 
-  $("admin-login-open").style.display =
-    isAdmin ? "none" : "";
+  button.innerHTML = isAdmin
+    ? '<span class="admin-login-icon">♙</span><span>Admin Dashboard</span>'
+    : '<span class="admin-login-icon">♙</span><span>Admin Access</span>';
 
-  $("admin-logout").style.display =
-    isAdmin ? "" : "none";
+  $("admin-logout").style.display = isAdmin ? "" : "none";
 
-  if (!isAdmin && category === "Requests") {
-    selectCategory("All");
+  if (!isAdmin && adminDashboardOpen) {
+    adminDashboardOpen = false;
+    $("admin-section").style.display = "none";
+    showShopCategory("All");
   }
 }
 
 async function logoutAdmin() {
-  await supabaseClient.auth.signOut();
+  const { error } = await supabaseClient.auth.signOut();
+
+  if (error) {
+    console.error("Logout failed:", error);
+    setText("admin-status", `Could not sign out: ${error.message}`);
+    return;
+  }
 
   currentSession = null;
   isAdmin = false;
   requests = [];
+  adminDashboardOpen = false;
 
   updateAdminUI();
-  selectCategory("All");
+  showShopCategory("All");
 }
 
 // ----------------------------------
 // RESTORE LOGIN SESSION
 // ----------------------------------
 
-async function initializeAuth() {
-  const { data, error } = await supabaseClient.auth.getSession();
+async function syncAuthSession(session) {
+  const thisRun = ++authCheckRun;
 
-  if (error) {
-    console.error(error);
-    return;
-  }
-
-  currentSession = data.session;
-
-  if (currentSession) {
-    isAdmin = await checkAdmin(currentSession.user.id);
-  }
-
-  updateAdminUI();
-}
-
-supabaseClient.auth.onAuthStateChange((event, session) => {
   currentSession = session;
 
   if (!session) {
@@ -1234,9 +1232,45 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
     return;
   }
 
-  checkAdmin(session.user.id).then(admin => {
-    isAdmin = admin;
-    updateAdminUI();
+  const admin = await checkAdmin(session.user.id);
+
+  if (thisRun !== authCheckRun) return;
+
+  isAdmin = admin;
+  updateAdminUI();
+}
+
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  // Run after Supabase finishes its internal auth event.
+  setTimeout(() => {
+    syncAuthSession(session);
+  }, 0);
+});
+
+async function initializeAuth() {
+  const { data, error } = await supabaseClient.auth.getSession();
+
+  if (error) {
+    console.error("Could not restore login:", error);
+    return;
+  }
+
+  await syncAuthSession(data.session);
+}
+
+// ----------------------------------
+// ADMIN: FILTERS
+// ----------------------------------
+
+document.querySelectorAll(".admin-filter").forEach(button => {
+  button.addEventListener("click", () => {
+    currentRequestFilter = button.dataset.status || "all";
+
+    document.querySelectorAll(".admin-filter").forEach(filter => {
+      filter.classList.toggle("active", filter === button);
+    });
+
+    renderRequests();
   });
 });
 
@@ -1247,10 +1281,10 @@ supabaseClient.auth.onAuthStateChange((event, session) => {
 async function loadRequests() {
   if (!isAdmin) return;
 
-  $("requests-list").innerHTML =
+  $("admin-requests").innerHTML =
     '<p class="muted">Loading requests...</p>';
 
-  $("requests-count").textContent = "Loading...";
+  $("admin-status").textContent = "Loading...";
 
   const { data, error } = await supabaseClient
     .from("orders")
@@ -1258,20 +1292,19 @@ async function loadRequests() {
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error(error);
+    console.error("Request loading failed:", error);
 
-    $("requests-list").innerHTML =
+    $("admin-requests").innerHTML =
       `<p class="muted">Could not load requests: ${escapeHTML(error.message)}</p>`;
 
-    $("requests-count").textContent = "Error loading requests";
-
+    $("admin-status").textContent = "Error loading requests.";
     return;
   }
 
   requests = data || [];
 
-  $("requests-count").textContent =
-    `${requests.length} request(s)`;
+  $("admin-status").textContent =
+    `${requests.length} request(s) in total.`;
 
   renderRequests();
 }
@@ -1281,13 +1314,19 @@ async function loadRequests() {
 // ----------------------------------
 
 function renderRequests() {
-  if (!requests.length) {
-    $("requests-list").innerHTML =
-      '<p class="muted">No requests have been submitted yet.</p>';
+  const filtered = currentRequestFilter === "all"
+    ? requests
+    : requests.filter(request =>
+        request.status === currentRequestFilter
+      );
+
+  if (!filtered.length) {
+    $("admin-requests").innerHTML =
+      '<p class="muted">No requests found in this category.</p>';
     return;
   }
 
-  $("requests-list").innerHTML = requests.map(request => {
+  $("admin-requests").innerHTML = filtered.map(request => {
     const items = Array.isArray(request.items)
       ? request.items
       : [];
@@ -1323,31 +1362,37 @@ function renderRequests() {
             ${Number(item.quantity)} stacks ·
             ${Number(item.discount_percent || 0)}% discount
           </small>
-          <p>
-            ${money(item.line_total)}
-          </p>
+          <p>${money(item.line_total)}</p>
         </div>
       `;
     }).join("");
 
-    const linkHTML = links.map(link => `
-      <p>
-        <a href="${escapeHTML(link)}" target="_blank" rel="noopener noreferrer">
-          Open reference link
-        </a>
-      </p>
-    `).join("");
+    const linkHTML = links.map(link => {
+      const safeLink = escapeHTML(link);
 
-    const imageHTML = images.map(url => `
-      <a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">
-        <img
-          src="${escapeHTML(url)}"
-          alt="Customer reference"
-          loading="lazy"
-          style="width:100px;height:100px;object-fit:cover;border-radius:8px;margin:5px"
-        >
-      </a>
-    `).join("");
+      return `
+        <p>
+          <a href="${safeLink}" target="_blank" rel="noopener noreferrer">
+            Open reference link
+          </a>
+        </p>
+      `;
+    }).join("");
+
+    const imageHTML = images.map(url => {
+      const safeUrl = escapeHTML(url);
+
+      return `
+        <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">
+          <img
+            src="${safeUrl}"
+            alt="Customer reference"
+            loading="lazy"
+            style="width:100px;height:100px;object-fit:cover;border-radius:8px;margin:5px"
+          >
+        </a>
+      `;
+    }).join("");
 
     return `
       <article class="request-card">
@@ -1360,7 +1405,6 @@ function renderRequests() {
             </div>
 
             <h3>${escapeHTML(request.minecraft_name)}</h3>
-
             <small>${escapeHTML(date)}</small>
           </div>
 
@@ -1408,28 +1452,31 @@ function renderRequests() {
         </div>
 
         <div class="request-actions">
-          ${request.status !== "accepted" && request.status !== "completed" && request.status !== "rejected" ? `
-            <button class="checkout" data-status="${request.id}" data-value="accepted">
-              Accept
-            </button>
+          ${request.status === "pending" ? `
+            <button
+              class="checkout"
+              data-request-id="${escapeHTML(request.id)}"
+              data-new-status="accepted"
+              type="button"
+            >Accept</button>
           ` : ""}
 
           ${request.status === "accepted" ? `
-            <button class="checkout" data-status="${request.id}" data-value="paid">
-              Mark as paid
-            </button>
-          ` : ""}
-
-          ${request.status === "accepted" || request.status === "paid" ? `
-            <button class="checkout" data-status="${request.id}" data-value="completed">
-              Complete
-            </button>
+            <button
+              class="checkout"
+              data-request-id="${escapeHTML(request.id)}"
+              data-new-status="completed"
+              type="button"
+            >Complete</button>
           ` : ""}
 
           ${request.status === "pending" || request.status === "accepted" ? `
-            <button class="admin-reject" data-status="${request.id}" data-value="rejected">
-              Reject
-            </button>
+            <button
+              class="admin-reject"
+              data-request-id="${escapeHTML(request.id)}"
+              data-new-status="rejected"
+              type="button"
+            >Reject</button>
           ` : ""}
         </div>
 
@@ -1437,11 +1484,11 @@ function renderRequests() {
     `;
   }).join("");
 
-  document.querySelectorAll("[data-status]").forEach(button => {
+  document.querySelectorAll("[data-request-id]").forEach(button => {
     button.addEventListener("click", () =>
       updateRequestStatus(
-        button.dataset.status,
-        button.dataset.value
+        button.dataset.requestId,
+        button.dataset.newStatus
       )
     );
   });
@@ -1455,7 +1502,6 @@ async function updateRequestStatus(id, newStatus) {
   const allowedStatuses = [
     "pending",
     "accepted",
-    "paid",
     "completed",
     "rejected"
   ];
@@ -1464,14 +1510,16 @@ async function updateRequestStatus(id, newStatus) {
     return;
   }
 
+  setText("admin-status", "Updating request...");
+
   const { error } = await supabaseClient
     .from("orders")
     .update({ status: newStatus })
     .eq("id", id);
 
   if (error) {
-    console.error(error);
-    alert(`Could not update request: ${error.message}`);
+    console.error("Status update failed:", error);
+    setText("admin-status", `Could not update request: ${error.message}`);
     return;
   }
 
