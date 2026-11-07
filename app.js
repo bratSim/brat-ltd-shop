@@ -81,9 +81,7 @@ function money(n) {
 }
 
 function roundMoney(n) {
-  return Math.round(
-    (Number(n) + Number.EPSILON) * 1000
-  ) / 1000;
+  return Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
 }
 
 function checkoutMoney(n) {
@@ -98,26 +96,20 @@ function getDiscountPercent(quantity) {
 }
 
 function getManualDiscount(product) {
-  return Math.max(
-    0,
-    Math.min(90, Number(product.discountPercent || 0))
-  );
+  return Math.max(0, Math.min(90, Number(product.discountPercent || 0)));
 }
 
 function getSalePrice(product) {
-  const discount = getManualDiscount(product);
-
   return roundMoney(
-    Number(product.price) * (1 - discount / 100)
+    Number(product.price) * (1 - getManualDiscount(product) / 100)
   );
 }
 
+// Manual discount first, quantity discount second.
 function unitPrice(product, quantity) {
-  const salePrice = getSalePrice(product);
-  const quantityDiscount = getDiscountPercent(quantity);
-
   return roundMoney(
-    salePrice * (1 - quantityDiscount / 100)
+    getSalePrice(product) *
+    (1 - getDiscountPercent(quantity) / 100)
   );
 }
 
@@ -137,6 +129,15 @@ function formatDate(value) {
     dateStyle: "medium",
     timeStyle: "short"
   });
+}
+
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 // ==================================
@@ -186,11 +187,8 @@ function imageMarkup(name, cat, cls = "") {
 // ==================================
 
 async function loadProducts() {
-  $("products").innerHTML =
-    '<p class="muted">Loading products...</p>';
-
-  $("offers-grid").innerHTML =
-    '<div class="loading-card">Loading featured offers...</div>';
+  $("products").innerHTML = '<p class="muted">Loading products...</p>';
+  $("offers-grid").innerHTML = '<div class="loading-card">Loading featured offers...</div>';
 
   const { data, error } = await supabaseClient
     .from("products")
@@ -209,13 +207,8 @@ async function loadProducts() {
 
   if (error) {
     console.error("Product loading failed:", error);
-
-    $("products").innerHTML =
-      '<p class="muted">Could not load products.</p>';
-
-    $("offers-grid").innerHTML =
-      '<div class="loading-card">Offers are temporarily unavailable.</div>';
-
+    $("products").innerHTML = '<p class="muted">Could not load products.</p>';
+    $("offers-grid").innerHTML = '<div class="loading-card">Offers are temporarily unavailable.</div>';
     return;
   }
 
@@ -239,14 +232,13 @@ async function loadProducts() {
 // ==================================
 
 function productPriceMarkup(product) {
-  const manualDiscount = getManualDiscount(product);
-  const salePrice = getSalePrice(product);
+  const discount = getManualDiscount(product);
 
-  if (manualDiscount > 0) {
+  if (discount > 0) {
     return `
       <div class="product-prices">
         <span class="old-price">${money(product.price)}</span>
-        <span class="price">${money(salePrice)} <small>/ stack</small></span>
+        <span class="price">${money(getSalePrice(product))} <small>/ stack</small></span>
       </div>
     `;
   }
@@ -272,8 +264,16 @@ function adminProductButton(product) {
   `;
 }
 
+function attachProductEditorButtons() {
+  document.querySelectorAll("[data-edit-product]").forEach(button => {
+    button.addEventListener("click", () => {
+      openProductEditor(button.dataset.editProduct);
+    });
+  });
+}
+
 // ==================================
-// HOMEPAGE: DISCOUNTED OFFERS ONLY
+// HOMEPAGE: OFFERS ONLY
 // ==================================
 
 function renderOffers() {
@@ -289,7 +289,6 @@ function renderOffers() {
   $("offers-grid").innerHTML = selected.length
     ? selected.map(product => {
         const discount = getManualDiscount(product);
-        const salePrice = getSalePrice(product);
 
         return `
           <article class="offer-card">
@@ -306,7 +305,7 @@ function renderOffers() {
               <div class="offer-prices">
                 <span class="old-price">${money(product.price)}</span>
                 <span class="offer-price">
-                  ${money(salePrice)} <small>/ stack</small>
+                  ${money(getSalePrice(product))} <small>/ stack</small>
                 </span>
               </div>
 
@@ -319,12 +318,7 @@ function renderOffers() {
       }).join("")
     : '<div class="loading-card">There are currently no special offers.</div>';
 
-  // Admin editing also works on homepage offers.
-  document.querySelectorAll("#offers-grid [data-edit-product]").forEach(button => {
-    button.addEventListener("click", () =>
-      openProductEditor(button.dataset.editProduct)
-    );
-  });
+  attachProductEditorButtons();
 }
 
 // ==================================
@@ -370,7 +364,6 @@ function renderProducts() {
           ` : ""}
 
           ${adminProductButton(product)}
-
           ${imageMarkup(product.name, product.category)}
         </div>
 
@@ -390,10 +383,7 @@ function renderProducts() {
           </div>
 
           <small class="stack-info">${stackText(product)}</small>
-
-          <div class="discount-note">
-            Quantity discounts: up to 15%
-          </div>
+          <div class="discount-note">Quantity discounts: up to 15%</div>
         </div>
       </article>
     `;
@@ -410,22 +400,13 @@ function renderProducts() {
   $("products").innerHTML = html;
 
   document.querySelectorAll("[data-add]").forEach(button => {
-    button.addEventListener("click", () =>
-      addToCart(button.dataset.add)
-    );
+    button.addEventListener("click", () => addToCart(button.dataset.add));
   });
 
-  document.querySelectorAll("[data-edit-product]").forEach(button => {
-    button.addEventListener("click", () =>
-      openProductEditor(button.dataset.editProduct)
-    );
-  });
+  attachProductEditorButtons();
 
   const form = $("service-form");
-
-  if (form) {
-    form.addEventListener("submit", handleServiceSubmit);
-  }
+  if (form) form.addEventListener("submit", handleServiceSubmit);
 }
 
 // ==================================
@@ -441,15 +422,11 @@ function createProductEditor() {
 
   modal.innerHTML = `
     <div class="modal product-editor-modal">
-      <button
-        class="icon-button modal-close"
-        id="product-editor-close"
-        type="button"
-      >×</button>
+      <button class="icon-button modal-close" id="product-editor-close" type="button">×</button>
 
       <div class="eyebrow orange">BRAT LTD. ADMIN</div>
       <h2>Edit product</h2>
-      <p class="muted">Change the regular price and set a special offer.</p>
+      <p class="muted">Change the regular price and create a special offer.</p>
 
       <form id="product-editor-form">
         <label>
@@ -459,33 +436,19 @@ function createProductEditor() {
 
         <label>
           Regular price (KB$)
-          <input
-            id="edit-product-price"
-            type="number"
-            min="0.001"
-            max="100000000"
-            step="0.001"
-            required
-          >
+          <input id="edit-product-price" type="number" min="0.001" max="100000000" step="0.001" required>
         </label>
 
         <label>
           Special discount (%)
-          <input
-            id="edit-product-discount"
-            type="number"
-            min="0"
-            max="90"
-            step="1"
-            required
-          >
+          <input id="edit-product-discount" type="number" min="0" max="90" step="1" required>
         </label>
 
         <div id="product-editor-preview" class="product-editor-preview"></div>
 
         <p class="small muted">
           Set the discount to 0 to remove the offer from the homepage.
-          Quantity discounts are added automatically at checkout.
+          Quantity discounts are applied in addition to this discount.
         </p>
 
         <p id="product-editor-status" class="small muted"></p>
@@ -506,7 +469,6 @@ function createProductEditor() {
   });
 
   $("product-editor-form").addEventListener("submit", saveProductChanges);
-
   $("edit-product-price").addEventListener("input", updateProductEditorPreview);
   $("edit-product-discount").addEventListener("input", updateProductEditorPreview);
 }
@@ -518,7 +480,6 @@ function openProductEditor(id) {
   if (!product) return;
 
   createProductEditor();
-
   editingProductId = product.id;
 
   $("edit-product-name").value = product.name;
@@ -527,23 +488,18 @@ function openProductEditor(id) {
   $("product-editor-status").textContent = "";
 
   updateProductEditorPreview();
-
   $("product-editor-modal").classList.add("show");
 }
 
 function closeProductEditor() {
   const modal = $("product-editor-modal");
   if (modal) modal.classList.remove("show");
-
   editingProductId = null;
 }
 
 function updateProductEditorPreview() {
   const price = Number($("edit-product-price").value);
-  const discount = Math.max(
-    0,
-    Math.min(90, Number($("edit-product-discount").value || 0))
-  );
+  const discount = Math.max(0, Math.min(90, Number($("edit-product-discount").value || 0)));
 
   if (!Number.isFinite(price) || price <= 0) {
     $("product-editor-preview").innerHTML =
@@ -562,9 +518,7 @@ function updateProductEditorPreview() {
       <span class="product-discount-badge">−${discount}%</span>
     `
     : `
-      <div>
-        <strong>${money(price)}</strong>
-      </div>
+      <div><strong>${money(price)}</strong></div>
       <span class="muted">No special offer</span>
     `;
 }
@@ -572,7 +526,7 @@ function updateProductEditorPreview() {
 async function saveProductChanges(event) {
   event.preventDefault();
 
-  if (!isAdmin || !editingProductId) return;
+  if (!isAdmin || editingProductId === null) return;
 
   const price = Number($("edit-product-price").value);
   const discount = Number($("edit-product-discount").value);
@@ -591,13 +545,15 @@ async function saveProductChanges(event) {
   button.disabled = true;
   button.textContent = "Saving...";
 
+  const productId = editingProductId;
+
   const { error } = await supabaseClient
     .from("products")
     .update({
       price: roundMoney(price),
       discount_percent: discount
     })
-    .eq("id", editingProductId);
+    .eq("id", productId);
 
   if (error) {
     console.error("Product update failed:", error);
@@ -608,7 +564,6 @@ async function saveProductChanges(event) {
   }
 
   closeProductEditor();
-
   await loadProducts();
 
   button.disabled = false;
@@ -624,76 +579,40 @@ function serviceFormMarkup() {
     <section class="service-request-card">
       <div class="service-request-header">
         <div class="eyebrow orange">MADE FOR YOUR PROJECT</div>
-
         <h3>Request a <em>custom service.</em></h3>
-
-        <p>
-          Need something special? Describe your idea and
-          make your own price proposal.
-        </p>
+        <p>Need something special? Describe your idea and make your own price proposal.</p>
       </div>
 
       <form id="service-form">
         <label class="service-label">
           Service title
-          <input
-            id="service-title"
-            type="text"
-            maxlength="80"
-            placeholder="e.g. Custom medieval castle"
-            required
-          >
+          <input id="service-title" type="text" maxlength="80" placeholder="e.g. Custom medieval castle" required>
         </label>
 
         <label class="service-label">
           Description
-          <textarea
-            id="service-description"
-            rows="5"
-            maxlength="3000"
-            placeholder="Describe exactly what you need..."
-            required
-          ></textarea>
+          <textarea id="service-description" rows="5" maxlength="3000" placeholder="Describe exactly what you need..." required></textarea>
         </label>
 
         <label class="service-label">
           Reference link <span>(optional)</span>
-          <input
-            id="service-link"
-            type="url"
-            maxlength="500"
-            placeholder="https://..."
-          >
+          <input id="service-link" type="url" maxlength="500" placeholder="https://...">
         </label>
 
         <label class="service-label">
           Images <span>(optional, max. 5 images, 5 MB each)</span>
-          <input
-            id="service-images"
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            multiple
-          >
+          <input id="service-images" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple>
         </label>
 
         <div id="service-image-preview" class="service-image-preview"></div>
 
         <label class="service-label">
           Your proposed price (KB$)
-          <input
-            id="service-price"
-            type="number"
-            min="0.001"
-            max="100000000"
-            step="0.001"
-            placeholder="e.g. 150"
-            required
-          >
+          <input id="service-price" type="number" min="0.001" max="100000000" step="0.001" placeholder="e.g. 150" required>
         </label>
 
         <p class="service-disclaimer">
-          Your proposed price will be reviewed by Brat Ltd.
-          before the service is accepted.
+          Your proposed price will be reviewed by Brat Ltd. before the service is accepted.
         </p>
 
         <button type="submit" class="checkout">
@@ -717,7 +636,6 @@ document.addEventListener("change", event => {
   const files = Array.from(event.target.files || []);
 
   if (!preview) return;
-
   preview.innerHTML = "";
 
   if (files.length > 5) {
@@ -732,7 +650,6 @@ document.addEventListener("change", event => {
     const img = document.createElement("img");
     img.alt = file.name;
     img.src = URL.createObjectURL(file);
-
     preview.appendChild(img);
   });
 });
@@ -746,8 +663,7 @@ async function uploadServiceImages(files) {
 
   for (const file of files) {
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const filePath =
-      `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+    const filePath = `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
 
     const { error } = await supabaseClient.storage
       .from("service-attachments")
@@ -757,9 +673,7 @@ async function uploadServiceImages(files) {
       });
 
     if (error) {
-      throw new Error(
-        `Could not upload ${file.name}: ${error.message}`
-      );
+      throw new Error(`Could not upload ${file.name}: ${error.message}`);
     }
 
     const { data } = supabaseClient.storage
@@ -801,38 +715,23 @@ async function handleServiceSubmit(event) {
     return;
   }
 
-  const allowedTypes = [
-    "image/png",
-    "image/jpeg",
-    "image/webp",
-    "image/gif"
-  ];
+  const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
   for (const file of files) {
     if (!allowedTypes.includes(file.type)) {
-      status.textContent =
-        "Only PNG, JPG, WEBP and GIF images are allowed.";
+      status.textContent = "Only PNG, JPG, WEBP and GIF images are allowed.";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      status.textContent =
-        `The image "${file.name}" is larger than 5 MB.`;
+      status.textContent = `The image "${file.name}" is larger than 5 MB.`;
       return;
     }
   }
 
-  if (link) {
-    try {
-      const parsedLink = new URL(link);
-
-      if (!["http:", "https:"].includes(parsedLink.protocol)) {
-        throw new Error("Invalid link");
-      }
-    } catch {
-      status.textContent = "Please enter a valid link.";
-      return;
-    }
+  if (link && !safeExternalUrl(link)) {
+    status.textContent = "Please enter a valid link.";
+    return;
   }
 
   const button = event.submitter;
@@ -843,8 +742,7 @@ async function handleServiceSubmit(event) {
   try {
     const imageUrls = await uploadServiceImages(files);
 
-    const serviceId =
-      `service_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const serviceId = `service_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     cart[serviceId] = {
       type: "service",
@@ -860,19 +758,16 @@ async function handleServiceSubmit(event) {
     openCart();
 
     status.textContent = "Service request added to your cart.";
-
     $("service-form").reset();
     $("service-image-preview").innerHTML = "";
 
   } catch (error) {
     console.error(error);
-    status.textContent =
-      error.message || "Something went wrong. Please try again.";
+    status.textContent = error.message || "Something went wrong. Please try again.";
 
   } finally {
     button.disabled = false;
-    button.innerHTML =
-      'Add service request to cart <span>→</span>';
+    button.innerHTML = 'Add service request to cart <span>→</span>';
   }
 }
 
@@ -890,8 +785,7 @@ function getCartEntries() {
       return Number(item.price) > 0;
     }
 
-    return products.some(p => String(p.id) === String(id)) &&
-      Number(item) > 0;
+    return products.some(p => String(p.id) === String(id)) && Number(item) > 0;
   }).map(([id, item]) => {
     if (item && typeof item === "object" && item.type === "service") {
       return {
@@ -924,9 +818,7 @@ function addToCart(id) {
 function changeQty(id, delta) {
   cart[id] = (Number(cart[id]) || 0) + delta;
 
-  if (cart[id] <= 0) {
-    delete cart[id];
-  }
+  if (cart[id] <= 0) delete cart[id];
 
   saveCart();
   renderCart();
@@ -952,7 +844,6 @@ function getCartTotals() {
   entries.forEach(entry => {
     if (entry.type === "service") {
       const price = Number(entry.service.price);
-
       originalTotal += price;
       afterManualDiscount += price;
       total += price;
@@ -962,27 +853,17 @@ function getCartTotals() {
     const product = entry.product;
     const quantity = entry.quantity;
 
-    const regularLine = Number(product.price) * quantity;
-    const saleUnit = getSalePrice(product);
-    const saleLine = saleUnit * quantity;
-    const finalLine = unitPrice(product, quantity) * quantity;
-
-    originalTotal += regularLine;
-    afterManualDiscount += saleLine;
-    total += finalLine;
+    originalTotal += Number(product.price) * quantity;
+    afterManualDiscount += getSalePrice(product) * quantity;
+    total += unitPrice(product, quantity) * quantity;
   });
 
   originalTotal = roundMoney(originalTotal);
   afterManualDiscount = roundMoney(afterManualDiscount);
   total = roundMoney(total);
 
-  const manualSavings = roundMoney(
-    originalTotal - afterManualDiscount
-  );
-
-  const quantitySavings = roundMoney(
-    afterManualDiscount - total
-  );
+  const manualSavings = roundMoney(originalTotal - afterManualDiscount);
+  const quantitySavings = roundMoney(afterManualDiscount - total);
 
   return {
     entries,
@@ -1016,24 +897,13 @@ function renderCart() {
                 <small>CUSTOM SERVICE REQUEST</small>
                 <small>${money(service.price)} · Proposed price</small>
                 <small>${escapeHTML(service.description)}</small>
-
-                ${service.link ? `
-                  <small>Reference: ${escapeHTML(service.link)}</small>
-                ` : ""}
-
+                ${service.link ? `<small>Reference: ${escapeHTML(service.link)}</small>` : ""}
                 <small>${service.imageUrls.length} attached image(s)</small>
-
-                <small class="cart-discount">
-                  Subject to approval by Brat Ltd.
-                </small>
+                <small class="cart-discount">Subject to approval by Brat Ltd.</small>
               </div>
 
               <div class="qty">
-                <button
-                  data-remove-service="${escapeHTML(entry.id)}"
-                  aria-label="Remove service"
-                  type="button"
-                >×</button>
+                <button data-remove-service="${escapeHTML(entry.id)}" aria-label="Remove service" type="button">×</button>
               </div>
             </div>
           `;
@@ -1041,7 +911,6 @@ function renderCart() {
 
         const product = entry.product;
         const quantity = entry.quantity;
-
         const manualDiscount = getManualDiscount(product);
         const quantityDiscount = getDiscountPercent(quantity);
 
@@ -1065,9 +934,7 @@ function renderCart() {
                 ${money(finalSum)} total
               </small>
 
-              <small>
-                ${quantity} stacks · ${quantity * product.stackSize} items
-              </small>
+              <small>${quantity} stacks · ${quantity * product.stackSize} items</small>
 
               ${manualDiscount > 0 ? `
                 <small class="cart-discount">
@@ -1077,19 +944,14 @@ function renderCart() {
 
               ${quantityDiscount > 0 ? `
                 <small class="cart-discount">
-                  Quantity discount: ${quantityDiscount}% ·
-                  Save ${money(quantitySaved)}
+                  Quantity discount: ${quantityDiscount}% · Save ${money(quantitySaved)}
                 </small>
               ` : ""}
 
               ${totalSaved > 0 ? `
                 <small>Regular price: ${money(regularSum)}</small>
-                <small class="cart-discount">
-                  Total savings: ${money(totalSaved)}
-                </small>
-              ` : `
-                <small>No discount yet</small>
-              `}
+                <small class="cart-discount">Total savings: ${money(totalSaved)}</small>
+              ` : `<small>No discount yet</small>`}
             </div>
 
             <div class="qty">
@@ -1103,9 +965,7 @@ function renderCart() {
     : '<p class="empty">Your cart is empty.</p>';
 
   const totals = getCartTotals();
-
-  const serviceCount =
-    totals.entries.filter(e => e.type === "service").length;
+  const serviceCount = totals.entries.filter(e => e.type === "service").length;
 
   $("cart-count").textContent = totalStacks + serviceCount;
   $("cart-total").textContent = money(totals.total);
@@ -1115,18 +975,13 @@ function renderCart() {
   }
 
   document.querySelectorAll("[data-change]").forEach(button => {
-    button.addEventListener("click", () =>
-      changeQty(
-        button.dataset.change,
-        Number(button.dataset.delta)
-      )
-    );
+    button.addEventListener("click", () => {
+      changeQty(button.dataset.change, Number(button.dataset.delta));
+    });
   });
 
   document.querySelectorAll("[data-remove-service]").forEach(button => {
-    button.addEventListener("click", () =>
-      removeService(button.dataset.removeService)
-    );
+    button.addEventListener("click", () => removeService(button.dataset.removeService));
   });
 }
 
@@ -1155,10 +1010,7 @@ function showShopCategory(selectedCategory) {
   $("admin-section").style.display = "none";
 
   document.querySelectorAll(".nav-link").forEach(element => {
-    element.classList.toggle(
-      "active",
-      element.dataset.category === category
-    );
+    element.classList.toggle("active", element.dataset.category === category);
   });
 
   renderProducts();
@@ -1206,11 +1058,8 @@ document.querySelectorAll("[data-category]").forEach(element => {
 $("search").addEventListener("input", () => {
   if (adminDashboardOpen) return;
 
-  if (category === "All") {
-    renderOffers();
-  } else {
-    renderProducts();
-  }
+  if (category === "All") renderOffers();
+  else renderProducts();
 });
 
 // ==================================
@@ -1228,11 +1077,8 @@ $("close-modal").addEventListener("click", () => {
 });
 
 $("admin-login-open").addEventListener("click", () => {
-  if (isAdmin) {
-    showAdminDashboard();
-  } else {
-    $("admin-login-modal").classList.add("show");
-  }
+  if (isAdmin) showAdminDashboard();
+  else $("admin-login-modal").classList.add("show");
 });
 
 $("admin-login-close").addEventListener("click", () => {
@@ -1260,44 +1106,23 @@ function showCheckoutTotal() {
   } = totals;
 
   if (!entries.length) {
-    $("order-status").textContent =
-      "Add some products to your cart first.";
+    $("order-status").textContent = "Add some products to your cart first.";
     return;
   }
 
   const preview = $("checkout-total-preview");
-
-  const serviceCount =
-    entries.filter(e => e.type === "service").length;
+  const serviceCount = entries.filter(e => e.type === "service").length;
 
   preview.innerHTML = `
     <div class="checkout-summary">
       <div>Original total: <strong>${money(originalTotal)}</strong></div>
-
-      <div>
-        Special offer discounts:
-        <strong>−${money(manualSavings)}</strong>
-      </div>
-
-      <div>
-        Quantity discounts:
-        <strong>−${money(quantitySavings)}</strong>
-      </div>
-
-      <div>
-        Total savings:
-        <strong class="cart-discount">−${money(savings)}</strong>
-      </div>
-
+      <div>Special offer discounts: <strong>−${money(manualSavings)}</strong></div>
+      <div>Quantity discounts: <strong>−${money(quantitySavings)}</strong></div>
+      <div>Total savings: <strong class="cart-discount">−${money(savings)}</strong></div>
       <div>Discounted total: <strong>${money(total)}</strong></div>
       <div>Custom service requests: <strong>${serviceCount}</strong></div>
-
       <hr>
-
-      <div>
-        Final total (rounded up):
-        <strong>${checkoutMoney(checkoutTotal)}</strong>
-      </div>
+      <div>Final total (rounded up): <strong>${checkoutMoney(checkoutTotal)}</strong></div>
     </div>
   `;
 
@@ -1318,8 +1143,7 @@ async function submitOrder() {
   const note = $("order-note").value.trim();
 
   if (!name || name.length > 32) {
-    $("order-status").textContent =
-      "Please enter a valid Minecraft username.";
+    $("order-status").textContent = "Please enter a valid Minecraft username.";
     return;
   }
 
@@ -1358,7 +1182,6 @@ async function submitOrder() {
 
     const manualDiscount = getManualDiscount(product);
     const quantityDiscount = getDiscountPercent(quantity);
-
     const finalPrice = unitPrice(product, quantity);
 
     return {
@@ -1370,39 +1193,29 @@ async function submitOrder() {
       stack_size: product.stackSize,
       original_price: product.price,
       manual_discount_percent: manualDiscount,
+      discount_percent: quantityDiscount,
       quantity_discount_percent: quantityDiscount,
       discounted_price: finalPrice,
       line_total: roundMoney(finalPrice * quantity)
     };
   });
 
-  const serviceEntries =
-    entries.filter(entry => entry.type === "service");
+  const serviceEntries = entries.filter(entry => entry.type === "service");
+  const productEntries = entries.filter(entry => entry.type === "product");
 
-  const productEntries =
-    entries.filter(entry => entry.type === "product");
-
-  const requestType =
-    productEntries.length > 0 ? "product" : "service";
+  const requestType = productEntries.length > 0 ? "product" : "service";
 
   const description = serviceEntries.map(entry =>
     `${entry.service.title}\n${entry.service.description}`
   ).join("\n\n");
 
-  const links = serviceEntries
-    .map(entry => entry.service.link)
-    .filter(Boolean);
-
-  const imageUrls = serviceEntries
-    .flatMap(entry => entry.service.imageUrls || []);
+  const links = serviceEntries.map(entry => entry.service.link).filter(Boolean);
+  const imageUrls = serviceEntries.flatMap(entry => entry.service.imageUrls || []);
 
   const desiredPrice = serviceEntries.length
-    ? roundMoney(
-        serviceEntries.reduce(
-          (sum, entry) => sum + Number(entry.service.price),
-          0
-        )
-      )
+    ? roundMoney(serviceEntries.reduce(
+        (sum, entry) => sum + Number(entry.service.price), 0
+      ))
     : null;
 
   const payload = {
@@ -1427,18 +1240,14 @@ async function submitOrder() {
   $("order-status").style.color = "";
 
   try {
-    const { error } = await supabaseClient
-      .from("orders")
-      .insert(payload);
-
+    const { error } = await supabaseClient.from("orders").insert(payload);
     if (error) throw error;
 
     cart = {};
     saveCart();
     renderCart();
 
-    $("order-status").textContent =
-      "Your order has been submitted successfully!";
+    $("order-status").textContent = "Your order has been submitted successfully!";
     $("order-status").style.color = "#65c98a";
 
     $("player-name").value = "";
@@ -1452,15 +1261,12 @@ async function submitOrder() {
 
   } catch (error) {
     console.error("Order submission failed:", error);
-
-    $("order-status").textContent =
-      `Could not submit order: ${error.message}`;
+    $("order-status").textContent = `Could not submit order: ${error.message}`;
     $("order-status").style.color = "#e47766";
 
   } finally {
     button.disabled = false;
-    button.innerHTML =
-      'Create order request <span>→</span>';
+    button.innerHTML = 'Create order request <span>→</span>';
   }
 }
 
@@ -1480,8 +1286,10 @@ $("admin-login-form").addEventListener("submit", async event => {
   $("admin-login-status").textContent = "";
 
   try {
-    const { data, error } = await supabaseClient.auth
-      .signInWithPassword({ email, password });
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password
+    });
 
     if (error) throw error;
 
@@ -1491,14 +1299,11 @@ $("admin-login-form").addEventListener("submit", async event => {
 
     if (!admin) {
       await supabaseClient.auth.signOut();
-
       currentSession = null;
       isAdmin = false;
       updateAdminUI();
 
-      throw new Error(
-        "This account does not have administrator access."
-      );
+      throw new Error("This account does not have administrator access.");
     }
 
     isAdmin = true;
@@ -1556,9 +1361,7 @@ function updateAdminUI() {
 
   renderOffers();
 
-  if (!adminDashboardOpen && category !== "All") {
-    renderProducts();
-  }
+  if (!adminDashboardOpen && category !== "All") renderProducts();
 }
 
 async function logoutAdmin() {
@@ -1585,7 +1388,6 @@ async function logoutAdmin() {
 
 async function syncAuthSession(session) {
   const thisRun = ++authCheckRun;
-
   currentSession = session;
 
   if (!session) {
@@ -1595,7 +1397,6 @@ async function syncAuthSession(session) {
   }
 
   const admin = await checkAdmin(session.user.id);
-
   if (thisRun !== authCheckRun) return;
 
   isAdmin = admin;
@@ -1603,9 +1404,7 @@ async function syncAuthSession(session) {
 }
 
 supabaseClient.auth.onAuthStateChange((event, session) => {
-  setTimeout(() => {
-    syncAuthSession(session);
-  }, 0);
+  setTimeout(() => syncAuthSession(session), 0);
 });
 
 async function initializeAuth() {
@@ -1642,9 +1441,7 @@ document.querySelectorAll(".admin-filter").forEach(button => {
 async function loadRequests() {
   if (!isAdmin) return;
 
-  $("admin-requests").innerHTML =
-    '<p class="muted">Loading requests...</p>';
-
+  $("admin-requests").innerHTML = '<p class="muted">Loading requests...</p>';
   $("admin-status").textContent = "Loading...";
 
   const { data, error } = await supabaseClient
@@ -1654,19 +1451,15 @@ async function loadRequests() {
 
   if (error) {
     console.error("Request loading failed:", error);
-
     $("admin-requests").innerHTML =
       `<p class="muted">Could not load requests: ${escapeHTML(error.message)}</p>`;
-
     $("admin-status").textContent = "Error loading requests.";
     return;
   }
 
   requests = data || [];
 
-  $("admin-status").textContent =
-    `${requests.length} request(s) in total.`;
-
+  $("admin-status").textContent = `${requests.length} request(s) in total.`;
   renderRequests();
 }
 
@@ -1677,9 +1470,7 @@ async function loadRequests() {
 function renderRequests() {
   const filtered = currentRequestFilter === "all"
     ? requests
-    : requests.filter(request =>
-        request.status === currentRequestFilter
-      );
+    : requests.filter(request => request.status === currentRequestFilter);
 
   if (!filtered.length) {
     $("admin-requests").innerHTML =
@@ -1688,17 +1479,9 @@ function renderRequests() {
   }
 
   $("admin-requests").innerHTML = filtered.map(request => {
-    const items = Array.isArray(request.items)
-      ? request.items
-      : [];
-
-    const links = Array.isArray(request.links)
-      ? request.links
-      : [];
-
-    const images = Array.isArray(request.image_urls)
-      ? request.image_urls
-      : [];
+    const items = Array.isArray(request.items) ? request.items : [];
+    const links = Array.isArray(request.links) ? request.links : [];
+    const images = Array.isArray(request.image_urls) ? request.image_urls : [];
 
     const itemHTML = items.map(item => {
       if (item.type === "service") {
@@ -1716,6 +1499,11 @@ function renderRequests() {
         `;
       }
 
+      const manualDiscount = Number(item.manual_discount_percent || 0);
+      const quantityDiscount = Number(
+        item.quantity_discount_percent ?? item.discount_percent ?? 0
+      );
+
       return `
         <div class="request-item">
           <div class="request-item-heading">
@@ -1728,50 +1516,45 @@ function renderRequests() {
             ${Number(item.quantity) * Number(item.stack_size || 64)} items
           </p>
 
-          <div class="request-item-price">
-            ${money(item.line_total)}
-          </div>
+          <div class="request-item-price">${money(item.line_total)}</div>
 
           <small class="muted">
-            Special offer: ${Number(item.manual_discount_percent || 0)}% ·
-            Quantity discount: ${Number(item.quantity_discount_percent ?? item.discount_percent ?? 0)}%
+            Original price: ${money(Number(item.original_price || 0) * Number(item.quantity || 1))}
           </small>
+
+          ${manualDiscount > 0 ? `
+            <small class="request-discount-line">
+              Special offer: −${manualDiscount}%
+            </small>
+          ` : ""}
+
+          ${quantityDiscount > 0 ? `
+            <small class="request-discount-line">
+              Quantity discount: −${quantityDiscount}%
+            </small>
+          ` : ""}
         </div>
       `;
     }).join("");
 
     const linkHTML = links.map(link => {
-      let safeUrl;
-
-      try {
-        const parsed = new URL(link);
-        if (!["http:", "https:"].includes(parsed.protocol)) return "";
-        safeUrl = escapeHTML(parsed.href);
-      } catch {
-        return "";
-      }
+      const safeUrl = safeExternalUrl(link);
+      if (!safeUrl) return "";
 
       return `
-        <a class="request-link" href="${safeUrl}" target="_blank" rel="noopener noreferrer">
+        <a class="request-link" href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer">
           Open reference link ↗
         </a>
       `;
     }).join("");
 
     const imageHTML = images.map(url => {
-      let safeUrl;
-
-      try {
-        const parsed = new URL(url);
-        if (!["http:", "https:"].includes(parsed.protocol)) return "";
-        safeUrl = escapeHTML(parsed.href);
-      } catch {
-        return "";
-      }
+      const safeUrl = safeExternalUrl(url);
+      if (!safeUrl) return "";
 
       return `
-        <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">
-          <img src="${safeUrl}" alt="Customer reference" loading="lazy">
+        <a href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer">
+          <img src="${escapeHTML(safeUrl)}" alt="Customer reference" loading="lazy">
         </a>
       `;
     }).join("");
@@ -1781,13 +1564,13 @@ function renderRequests() {
     return `
       <article class="request-card">
         <div class="request-card-header">
-          <div>
+          <div class="request-customer">
             <div class="eyebrow orange">
               ${escapeHTML(request.request_type || "product")} REQUEST
             </div>
-
             <h3>${escapeHTML(request.minecraft_name || "Unknown player")}</h3>
             <small>${formatDate(request.created_at)}</small>
+            <small class="request-id">Order #${escapeHTML(request.id)}</small>
           </div>
 
           <span class="request-status status-${escapeHTML(status)}">
@@ -1797,6 +1580,7 @@ function renderRequests() {
 
         <div class="request-details">
           <div class="request-items-list">
+            <h4>Order details</h4>
             ${itemHTML || '<p class="muted">No item details available.</p>'}
           </div>
 
@@ -1833,12 +1617,10 @@ function renderRequests() {
               <span>Subtotal</span>
               <strong>${money(request.subtotal || 0)}</strong>
             </div>
-
             <div>
-              <span>Discount</span>
+              <span>Total discount</span>
               <strong>−${money(request.discount_amount || 0)}</strong>
             </div>
-
             <div class="request-total">
               <span>Total</span>
               <strong>${checkoutMoney(request.total || 0)}</strong>
@@ -1848,30 +1630,21 @@ function renderRequests() {
 
         <div class="request-actions">
           ${status === "pending" ? `
-            <button
-              class="request-action-accept"
-              data-request-id="${escapeHTML(request.id)}"
-              data-new-status="accepted"
-              type="button"
-            >Accept request</button>
+            <button class="request-action-accept" data-request-id="${escapeHTML(request.id)}" data-new-status="accepted" type="button">
+              Accept request
+            </button>
           ` : ""}
 
           ${status === "accepted" ? `
-            <button
-              class="request-action-accept"
-              data-request-id="${escapeHTML(request.id)}"
-              data-new-status="completed"
-              type="button"
-            >Mark as completed</button>
+            <button class="request-action-accept" data-request-id="${escapeHTML(request.id)}" data-new-status="completed" type="button">
+              Mark as completed
+            </button>
           ` : ""}
 
           ${status === "pending" || status === "accepted" ? `
-            <button
-              class="request-action-reject"
-              data-request-id="${escapeHTML(request.id)}"
-              data-new-status="rejected"
-              type="button"
-            >Reject</button>
+            <button class="request-action-reject" data-request-id="${escapeHTML(request.id)}" data-new-status="rejected" type="button">
+              Reject
+            </button>
           ` : ""}
         </div>
       </article>
@@ -1879,12 +1652,9 @@ function renderRequests() {
   }).join("");
 
   document.querySelectorAll("[data-request-id]").forEach(button => {
-    button.addEventListener("click", () =>
-      updateRequestStatus(
-        button.dataset.requestId,
-        button.dataset.newStatus
-      )
-    );
+    button.addEventListener("click", () => {
+      updateRequestStatus(button.dataset.requestId, button.dataset.newStatus);
+    });
   });
 }
 
@@ -1893,16 +1663,9 @@ function renderRequests() {
 // ==================================
 
 async function updateRequestStatus(id, newStatus) {
-  const allowedStatuses = [
-    "pending",
-    "accepted",
-    "completed",
-    "rejected"
-  ];
+  const allowedStatuses = ["pending", "accepted", "completed", "rejected"];
 
-  if (!isAdmin || !allowedStatuses.includes(newStatus)) {
-    return;
-  }
+  if (!isAdmin || !allowedStatuses.includes(newStatus)) return;
 
   setText("admin-status", "Updating request...");
 
