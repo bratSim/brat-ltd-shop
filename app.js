@@ -19,8 +19,6 @@ const categoryIcons = {
 };
 
 const textureAliases = {
-  "stone": "stone",
-  "cobblestone": "cobblestone",
   "oak log": "oak_log",
   "oak wood": "oak_log",
   "oak planks": "oak_planks",
@@ -28,26 +26,15 @@ const textureAliases = {
   "spruce planks": "spruce_planks",
   "birch log": "birch_log",
   "birch planks": "birch_planks",
-  "dirt": "dirt",
   "grass block": "grass_block",
-  "glass": "glass",
-  "sand": "sand",
-  "gravel": "gravel",
-  "obsidian": "obsidian",
-  "deepslate": "deepslate",
-  "diamond": "diamond",
-  "emerald": "emerald",
   "gold ingot": "gold_ingot",
   "iron ingot": "iron_ingot",
   "netherite ingot": "netherite_ingot",
-  "coal": "coal",
-  "redstone": "redstone",
   "lapis lazuli": "lapis_lazuli",
   "golden apple": "golden_apple",
   "enchanted golden apple": "enchanted_golden_apple",
   "ender pearl": "ender_pearl",
   "blaze rod": "blaze_rod",
-  "elytra": "elytra",
   "diamond sword": "diamond_sword",
   "netherite sword": "netherite_sword",
   "diamond pickaxe": "diamond_pickaxe",
@@ -60,19 +47,10 @@ const textureAliases = {
   "netherite chestplate": "netherite_chestplate",
   "netherite leggings": "netherite_leggings",
   "netherite boots": "netherite_boots",
-  "bow": "bow",
-  "crossbow": "crossbow",
-  "shield": "shield",
-  "trident": "trident",
   "enchanted book": "enchanted_book",
-  "book": "book",
-  "anvil": "anvil",
-  "shulker box": "shulker_box",
-  "chest": "chest",
-  "hopper": "hopper"
+  "shulker box": "shulker_box"
 };
 
-// HTML-Sonderzeichen absichern
 function escapeHTML(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({
     "&": "&amp;",
@@ -83,7 +61,6 @@ function escapeHTML(value) {
   }[c]));
 }
 
-// Geld formatieren
 function money(n) {
   return `${Number(n).toLocaleString("en-US", {
     minimumFractionDigits: 1,
@@ -91,19 +68,16 @@ function money(n) {
   })} KB$`;
 }
 
-// Auf drei Nachkommastellen rechnen
 function roundMoney(n) {
   return Math.round(
     (Number(n) + Number.EPSILON) * 1000
   ) / 1000;
 }
 
-// Checkout immer auf den nächsten ganzen KB$ aufrunden
 function checkoutMoney(n) {
   return `${Math.ceil(roundMoney(n)).toLocaleString("en-US")} KB$`;
 }
 
-// Rabattstufen
 function getDiscountPercent(stackCount) {
   const quantity = Number(stackCount);
 
@@ -114,27 +88,23 @@ function getDiscountPercent(stackCount) {
   return 0;
 }
 
-// Preis pro Stack inklusive Rabatt
 function unitPrice(p, stackCount) {
   const originalPrice = Number(p.price);
   const discount = getDiscountPercent(stackCount);
 
-  const discountedPrice =
-    originalPrice * (1 - discount / 100);
-
-  return roundMoney(discountedPrice);
-}
-
-// Alle Produkte haben Mengenrabatte
-function isOffer(p) {
-  return true;
+  return roundMoney(
+    originalPrice * (1 - discount / 100)
+  );
 }
 
 function stackText(p) {
   return `${p.stackSize} items per stack`;
 }
 
-// Minecraft-Textur-ID bestimmen
+// --------------------------------
+// MINECRAFT TEXTURES
+// --------------------------------
+
 function itemTextureId(name) {
   const key = String(name || "").trim().toLowerCase();
 
@@ -142,26 +112,43 @@ function itemTextureId(name) {
     key.replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
-// Textur-URL
-function textureUrl(name) {
-  return `https://assets.mcasset.cloud/1.21.4/assets/minecraft/textures/item/${encodeURIComponent(itemTextureId(name))}.png`;
+function textureUrl(name, type) {
+  const id = itemTextureId(name);
+
+  return `https://assets.mcasset.cloud/1.21.4/assets/minecraft/textures/${type}/${encodeURIComponent(id)}.png`;
 }
 
-// Produktbild
 function imageMarkup(name, cat, cls = "") {
   const fallback = categoryIcons[cat] || "✦";
 
-  return `<img class="${cls}"
-    src="${textureUrl(name)}"
-    alt="${escapeHTML(name)}"
-    loading="lazy"
-    onerror="this.replaceWith(Object.assign(document.createElement('span'), {
-      className: 'fallback-icon',
-      textContent: '${fallback}'
-    }))">`;
+  return `
+    <img
+      class="${cls}"
+      src="${textureUrl(name, "item")}"
+      data-block-texture="${escapeHTML(textureUrl(name, "block"))}"
+      alt="${escapeHTML(name)}"
+      loading="lazy"
+      onerror="
+        if (!this.dataset.triedBlock) {
+          this.dataset.triedBlock = 'true';
+          this.src = this.dataset.blockTexture;
+        } else {
+          this.replaceWith(
+            Object.assign(document.createElement('span'), {
+              className: 'fallback-icon',
+              textContent: '${fallback}'
+            })
+          );
+        }
+      "
+    >
+  `;
 }
 
-// Produkte aus Supabase laden
+// --------------------------------
+// PRODUCTS
+// --------------------------------
+
 async function loadProducts() {
   $("products").innerHTML =
     '<p class="muted">Loading products...</p>';
@@ -209,7 +196,10 @@ async function loadProducts() {
   renderCart();
 }
 
-// Angebotsbereich
+// --------------------------------
+// OFFERS
+// --------------------------------
+
 function renderOffers() {
   const selected = products.slice(0, 3);
 
@@ -237,7 +227,10 @@ function renderOffers() {
     : '<div class="loading-card">No products are available yet. Check back soon.</div>';
 }
 
-// Produktübersicht
+// --------------------------------
+// PRODUCT DISPLAY
+// --------------------------------
+
 function renderProducts() {
   const q = $("search").value.toLowerCase().trim();
 
@@ -250,7 +243,7 @@ function renderProducts() {
 
   $("result-count").textContent = `${shown.length} products`;
 
-  $("products").innerHTML = shown.map(p => `
+  let html = shown.map(p => `
     <article class="product-card">
       <div class="product-visual">
         <span class="product-tag">${escapeHTML(p.category)}</span>
@@ -280,14 +273,322 @@ function renderProducts() {
         </div>
       </div>
     </article>
-  `).join("") || '<p class="muted">No matching products found.</p>';
+  `).join("");
+
+  if (category === "Services" || category === "All") {
+    html += serviceFormMarkup();
+  }
+
+  $("products").innerHTML =
+    html || '<p class="muted">No matching products found.</p>';
 
   document.querySelectorAll("[data-add]").forEach(b =>
     b.addEventListener("click", () => addToCart(b.dataset.add))
   );
+
+  const serviceForm = $("service-form");
+
+  if (serviceForm) {
+    serviceForm.addEventListener("submit", handleServiceSubmit);
+  }
 }
 
-// Einen Stack hinzufügen
+// --------------------------------
+// SERVICE REQUEST FORM
+// --------------------------------
+
+function serviceFormMarkup() {
+  return `
+    <section class="service-request-card">
+
+      <div class="service-request-header">
+        <div class="eyebrow orange">MADE FOR YOUR PROJECT</div>
+        <h3>Request a <em>custom service.</em></h3>
+        <p>
+          Need something special? Describe your idea and
+          make your own price proposal.
+        </p>
+      </div>
+
+      <form id="service-form">
+
+        <label class="service-label">
+          Service title
+          <input
+            id="service-title"
+            type="text"
+            maxlength="80"
+            placeholder="e.g. Custom medieval castle"
+            required
+          >
+        </label>
+
+        <label class="service-label">
+          Description
+          <textarea
+            id="service-description"
+            rows="5"
+            maxlength="3000"
+            placeholder="Describe exactly what you need..."
+            required
+          ></textarea>
+        </label>
+
+        <label class="service-label">
+          Reference link <span>(optional)</span>
+          <input
+            id="service-link"
+            type="url"
+            maxlength="500"
+            placeholder="https://..."
+          >
+        </label>
+
+        <label class="service-label">
+          Images <span>(optional, max. 5 images, 5 MB each)</span>
+          <input
+            id="service-images"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+          >
+        </label>
+
+        <div id="service-image-preview" class="service-image-preview"></div>
+
+        <label class="service-label">
+          Your proposed price (KB$)
+          <input
+            id="service-price"
+            type="number"
+            min="0.001"
+            max="100000000"
+            step="0.001"
+            placeholder="e.g. 150"
+            required
+          >
+        </label>
+
+        <p class="service-disclaimer">
+          Your proposed price will be reviewed by Brat Ltd.
+          before the service is accepted.
+        </p>
+
+        <button type="submit" class="checkout">
+          Add service request to cart <span>→</span>
+        </button>
+
+        <p id="service-status" class="small muted"></p>
+
+      </form>
+    </section>
+  `;
+}
+
+// Image preview
+document.addEventListener("change", event => {
+  if (event.target.id !== "service-images") return;
+
+  const preview = $("service-image-preview");
+  const files = Array.from(event.target.files || []);
+
+  if (!preview) return;
+
+  preview.innerHTML = "";
+
+  if (files.length > 5) {
+    $("service-status").textContent =
+      "Please select a maximum of 5 images.";
+
+    event.target.value = "";
+    return;
+  }
+
+  files.forEach(file => {
+    if (!file.type.startsWith("image/")) return;
+
+    const img = document.createElement("img");
+    img.alt = file.name;
+    img.src = URL.createObjectURL(file);
+
+    preview.appendChild(img);
+  });
+});
+
+// Upload images to Supabase Storage
+async function uploadServiceImages(files) {
+  const urls = [];
+
+  for (const file of files) {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+    const filePath =
+      `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+
+    const { error } = await supabaseClient.storage
+      .from("service-attachments")
+      .upload(filePath, file, {
+        upsert: false,
+        contentType: file.type
+      });
+
+    if (error) {
+      throw new Error(
+        `Could not upload ${file.name}: ${error.message}`
+      );
+    }
+
+    const { data } = supabaseClient.storage
+      .from("service-attachments")
+      .getPublicUrl(filePath);
+
+    urls.push(data.publicUrl);
+  }
+
+  return urls;
+}
+
+// Create service request
+async function handleServiceSubmit(event) {
+  event.preventDefault();
+
+  const status = $("service-status");
+  const title = $("service-title").value.trim();
+  const description = $("service-description").value.trim();
+  const link = $("service-link").value.trim();
+  const price = Number($("service-price").value);
+  const files = Array.from($("service-images").files || []);
+
+  if (!title || !description) {
+    status.textContent = "Please complete the title and description.";
+    return;
+  }
+
+  if (!Number.isFinite(price) || price <= 0) {
+    status.textContent = "Please enter a valid price.";
+    return;
+  }
+
+  if (files.length > 5) {
+    status.textContent = "You can upload a maximum of 5 images.";
+    return;
+  }
+
+  const allowedTypes = [
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif"
+  ];
+
+  for (const file of files) {
+    if (!allowedTypes.includes(file.type)) {
+      status.textContent =
+        "Only PNG, JPG, WEBP and GIF images are allowed.";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      status.textContent =
+        `The image "${file.name}" is larger than 5 MB.`;
+      return;
+    }
+  }
+
+  if (link) {
+    try {
+      const parsedLink = new URL(link);
+
+      if (!["http:", "https:"].includes(parsedLink.protocol)) {
+        throw new Error("Invalid link");
+      }
+    } catch {
+      status.textContent = "Please enter a valid link.";
+      return;
+    }
+  }
+
+  const submitButton = event.submitter;
+
+  submitButton.disabled = true;
+  submitButton.textContent = "Uploading images...";
+
+  status.textContent = "Please wait while your images are uploaded.";
+
+  try {
+    const imageUrls = await uploadServiceImages(files);
+
+    const serviceId =
+      `service_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    cart[serviceId] = {
+      type: "service",
+      title,
+      description,
+      link,
+      imageUrls,
+      price: roundMoney(price)
+    };
+
+    saveCart();
+    renderCart();
+    openCart();
+
+    status.textContent = "Service request added to your cart.";
+
+    $("service-form").reset();
+    $("service-image-preview").innerHTML = "";
+
+  } catch (error) {
+    console.error("Service upload error:", error);
+
+    status.textContent =
+      error.message || "Something went wrong. Please try again.";
+
+  } finally {
+    submitButton.disabled = false;
+    submitButton.innerHTML =
+      'Add service request to cart <span>→</span>';
+  }
+}
+
+// --------------------------------
+// CART
+// --------------------------------
+
+function saveCart() {
+  localStorage.setItem("bratCart", JSON.stringify(cart));
+}
+
+function getCartEntries() {
+  return Object.entries(cart).filter(([id, item]) => {
+    if (item && typeof item === "object" && item.type === "service") {
+      return Number(item.price) > 0;
+    }
+
+    return products.some(p => String(p.id) === String(id)) &&
+      Number(item) > 0;
+  }).map(([id, item]) => {
+    if (item && typeof item === "object" && item.type === "service") {
+      return {
+        id,
+        type: "service",
+        service: item,
+        quantity: 1
+      };
+    }
+
+    const product = products.find(p => String(p.id) === String(id));
+
+    return {
+      id,
+      type: "product",
+      product,
+      quantity: Number(item)
+    };
+  });
+}
+
 function addToCart(id) {
   cart[id] = (Number(cart[id]) || 0) + 1;
 
@@ -296,7 +597,6 @@ function addToCart(id) {
   openCart();
 }
 
-// Stack-Anzahl verändern
 function changeQty(id, delta) {
   cart[id] = (Number(cart[id]) || 0) + delta;
 
@@ -308,24 +608,29 @@ function changeQty(id, delta) {
   renderCart();
 }
 
-// Warenkorb speichern
-function saveCart() {
-  localStorage.setItem("bratCart", JSON.stringify(cart));
+function removeService(id) {
+  delete cart[id];
+
+  saveCart();
+  renderCart();
 }
 
-// Gesamte Warenkorb-Berechnung
 function getCartTotals() {
-  const entries = Object.entries(cart).filter(([id, q]) =>
-    products.some(p => String(p.id) === String(id)) &&
-    Number(q) > 0
-  );
+  const entries = getCartEntries();
 
   let total = 0;
   let originalTotal = 0;
+  let savings = 0;
 
-  entries.forEach(([id, q]) => {
-    const p = products.find(x => String(x.id) === String(id));
-    const quantity = Number(q);
+  entries.forEach(entry => {
+    if (entry.type === "service") {
+      total += Number(entry.service.price);
+      originalTotal += Number(entry.service.price);
+      return;
+    }
+
+    const p = entry.product;
+    const quantity = entry.quantity;
 
     const discountedPrice = unitPrice(p, quantity);
 
@@ -335,8 +640,7 @@ function getCartTotals() {
 
   total = roundMoney(total);
   originalTotal = roundMoney(originalTotal);
-
-  const savings = roundMoney(originalTotal - total);
+  savings = roundMoney(originalTotal - total);
 
   return {
     entries,
@@ -347,38 +651,69 @@ function getCartTotals() {
   };
 }
 
-// Warenkorb anzeigen
 function renderCart() {
-  const entries = Object.entries(cart).filter(([id, q]) =>
-    products.some(p => String(p.id) === String(id)) &&
-    Number(q) > 0
-  );
+  const entries = getCartEntries();
 
-  let total = 0;
-  let originalTotal = 0;
-  let stackCount = 0;
+  let totalStacks = 0;
 
   $("cart-items").innerHTML = entries.length
-    ? entries.map(([id, q]) => {
-        const p = products.find(x => String(x.id) === String(id));
-        const quantity = Number(q);
+    ? entries.map(entry => {
+        if (entry.type === "service") {
+          const s = entry.service;
 
-        // Rabattstufe anhand der Stack-Anzahl
+          return `
+            <div class="cart-line service-cart-line">
+              <div>
+                <strong>${escapeHTML(s.title)}</strong>
+
+                <small>CUSTOM SERVICE REQUEST</small>
+
+                <small>
+                  ${money(s.price)} · Proposed price
+                </small>
+
+                <small>
+                  ${escapeHTML(s.description)}
+                </small>
+
+                ${s.link ? `
+                  <small>
+                    Reference: ${escapeHTML(s.link)}
+                  </small>
+                ` : ""}
+
+                <small>
+                  ${s.imageUrls.length} attached image(s)
+                </small>
+
+                <small class="cart-discount">
+                  Subject to approval by Brat Ltd.
+                </small>
+              </div>
+
+              <div class="qty">
+                <button
+                  data-remove-service="${escapeHTML(entry.id)}"
+                  aria-label="Remove service"
+                >×</button>
+              </div>
+            </div>
+          `;
+        }
+
+        const p = entry.product;
+        const quantity = entry.quantity;
+
         const discount = getDiscountPercent(quantity);
-
-        // Rabattpreis pro Stack
         const price = unitPrice(p, quantity);
 
-        // Gesamtpreise
         const sum = roundMoney(price * quantity);
         const originalSum = roundMoney(Number(p.price) * quantity);
         const saved = roundMoney(originalSum - sum);
 
         const itemCount = quantity * p.stackSize;
 
-        total += sum;
-        originalTotal += originalSum;
-        stackCount += quantity;
+        totalStacks += quantity;
 
         return `
           <div class="cart-line">
@@ -402,22 +737,20 @@ function renderCart() {
                   Regular price: ${money(originalSum)}
                 </small>
               ` : `
-                <small>
-                  No discount yet
-                </small>
+                <small>No discount yet</small>
               `}
             </div>
 
             <div class="qty">
               <button
-                data-change="${escapeHTML(id)}"
+                data-change="${escapeHTML(entry.id)}"
                 data-delta="-1"
               >−</button>
 
               <b>${quantity}</b>
 
               <button
-                data-change="${escapeHTML(id)}"
+                data-change="${escapeHTML(entry.id)}"
                 data-delta="1"
               >+</button>
             </div>
@@ -426,16 +759,13 @@ function renderCart() {
       }).join("")
     : '<p class="empty">Your cart is empty.</p>';
 
-  total = roundMoney(total);
-  originalTotal = roundMoney(originalTotal);
+  const totals = getCartTotals();
 
-  const savings = roundMoney(originalTotal - total);
-
-  $("cart-count").textContent = stackCount;
-  $("cart-total").textContent = money(total);
+  $("cart-count").textContent = totalStacks + totals.entries.filter(e => e.type === "service").length;
+  $("cart-total").textContent = money(totals.total);
 
   if ($("cart-savings")) {
-    $("cart-savings").textContent = money(savings);
+    $("cart-savings").textContent = money(totals.savings);
   }
 
   document.querySelectorAll("[data-change]").forEach(b =>
@@ -446,21 +776,32 @@ function renderCart() {
       )
     )
   );
+
+  document.querySelectorAll("[data-remove-service]").forEach(b =>
+    b.addEventListener("click", () =>
+      removeService(b.dataset.removeService)
+    )
+  );
 }
 
-// Warenkorb öffnen
+// --------------------------------
+// CART PANEL
+// --------------------------------
+
 function openCart() {
   $("cart-panel").classList.add("open");
   $("overlay").classList.add("show");
 }
 
-// Warenkorb schließen
 function closeCart() {
   $("cart-panel").classList.remove("open");
   $("overlay").classList.remove("show");
 }
 
-// Kategorien auswählen
+// --------------------------------
+// CATEGORY NAVIGATION
+// --------------------------------
+
 function selectCategory(c) {
   category = c;
 
@@ -486,13 +827,19 @@ document.querySelectorAll("[data-category]").forEach(e =>
   })
 );
 
-// Suchfeld und Buttons
+// --------------------------------
+// SEARCH AND BUTTONS
+// --------------------------------
+
 $("search").addEventListener("input", renderProducts);
 $("open-cart").onclick = openCart;
 $("close-cart").onclick = closeCart;
 $("overlay").onclick = closeCart;
 
-// Checkout anzeigen
+// --------------------------------
+// CHECKOUT
+// --------------------------------
+
 function showCheckoutTotal() {
   const {
     entries,
@@ -528,6 +875,8 @@ function showCheckoutTotal() {
     }
   }
 
+  const serviceCount = entries.filter(e => e.type === "service").length;
+
   preview.innerHTML = `
     <div class="checkout-summary">
 
@@ -544,6 +893,11 @@ function showCheckoutTotal() {
       <div>
         Discounted total:
         <strong>${money(total)}</strong>
+      </div>
+
+      <div>
+        Custom service requests:
+        <strong>${serviceCount}</strong>
       </div>
 
       <hr>
@@ -566,7 +920,10 @@ $("close-modal").onclick = () => {
   $("order-modal").classList.remove("show");
 };
 
-// Bestellung als Textdatei erstellen
+// --------------------------------
+// CREATE ORDER FILE
+// --------------------------------
+
 $("send-order").onclick = () => {
   const name = $("player-name").value.trim();
 
@@ -592,9 +949,32 @@ $("send-order").onclick = () => {
     return;
   }
 
-  const lines = entries.map(([id, q]) => {
-    const p = products.find(x => String(x.id) === String(id));
-    const quantity = Number(q);
+  const lines = entries.map(entry => {
+    if (entry.type === "service") {
+      const s = entry.service;
+
+      return `
+CUSTOM SERVICE REQUEST
+Title: ${s.title}
+
+Description:
+${s.description}
+
+Proposed price: ${money(s.price)}
+Approval: Pending review by Brat Ltd.
+
+Reference link:
+${s.link || "None"}
+
+Images:
+${s.imageUrls.length
+  ? s.imageUrls.join("\n")
+  : "None"}
+      `.trim();
+    }
+
+    const p = entry.product;
+    const quantity = entry.quantity;
 
     const discount = getDiscountPercent(quantity);
     const price = unitPrice(p, quantity);
@@ -627,7 +1007,9 @@ Final total (rounded up): ${checkoutMoney(checkoutTotal)}
 
 Note: ${$("order-note").value.trim() || "None"}
 
-Please arrange payment and delivery in-game with Brat Ltd. using KB$.`;
+Please arrange payment and delivery in-game with Brat Ltd. using KB$.
+
+Custom service prices are proposed prices and require approval by Brat Ltd.`;
 
   const blob = new Blob([content], {
     type: "text/plain"
@@ -647,9 +1029,9 @@ Please arrange payment and delivery in-game with Brat Ltd. using KB$.`;
     "Order request created as a text file. It has not been submitted automatically.";
 };
 
-// Start
-renderCart();
-loadProducts();
+// --------------------------------
+// START
+// --------------------------------
 
 renderCart();
 loadProducts();
