@@ -72,7 +72,7 @@ const textureAliases = {
   "hopper": "hopper"
 };
 
-// HTML-Sonderzeichen sicher darstellen
+// HTML-Sonderzeichen absichern
 function escapeHTML(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({
     "&": "&amp;",
@@ -83,7 +83,7 @@ function escapeHTML(value) {
   }[c]));
 }
 
-// Geldbeträge mit mindestens einer und maximal drei Nachkommastellen
+// Geld formatieren
 function money(n) {
   return `${Number(n).toLocaleString("en-US", {
     minimumFractionDigits: 1,
@@ -91,16 +91,50 @@ function money(n) {
   })} KB$`;
 }
 
-// Rechenwerte auf drei Nachkommastellen begrenzen
+// Auf drei Nachkommastellen rechnen
 function roundMoney(n) {
-  return Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
+  return Math.round(
+    (Number(n) + Number.EPSILON) * 1000
+  ) / 1000;
 }
 
-// Nur der endgültige Checkout-Betrag wird aufgerundet
+// Checkout immer auf den nächsten ganzen KB$ aufrunden
 function checkoutMoney(n) {
   return `${Math.ceil(roundMoney(n)).toLocaleString("en-US")} KB$`;
 }
 
+// Rabattstufen
+function getDiscountPercent(stackCount) {
+  const quantity = Number(stackCount);
+
+  if (quantity >= 16) return 15;
+  if (quantity >= 10) return 10;
+  if (quantity >= 6) return 5;
+
+  return 0;
+}
+
+// Preis pro Stack inklusive Rabatt
+function unitPrice(p, stackCount) {
+  const originalPrice = Number(p.price);
+  const discount = getDiscountPercent(stackCount);
+
+  const discountedPrice =
+    originalPrice * (1 - discount / 100);
+
+  return roundMoney(discountedPrice);
+}
+
+// Alle Produkte haben Mengenrabatte
+function isOffer(p) {
+  return true;
+}
+
+function stackText(p) {
+  return `${p.stackSize} items per stack`;
+}
+
+// Minecraft-Textur-ID bestimmen
 function itemTextureId(name) {
   const key = String(name || "").trim().toLowerCase();
 
@@ -108,10 +142,12 @@ function itemTextureId(name) {
     key.replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 }
 
+// Textur-URL
 function textureUrl(name) {
   return `https://assets.mcasset.cloud/1.21.4/assets/minecraft/textures/item/${encodeURIComponent(itemTextureId(name))}.png`;
 }
 
+// Produktbild
 function imageMarkup(name, cat, cls = "") {
   const fallback = categoryIcons[cat] || "✦";
 
@@ -123,31 +159,6 @@ function imageMarkup(name, cat, cls = "") {
       className: 'fallback-icon',
       textContent: '${fallback}'
     }))">`;
-}
-
-// Rabattpreis pro Stack abhängig von der Stack-Anzahl
-
-function getDiscountPercent(stackCount) {
-  if (stackCount >= 16) return 15;
-  if (stackCount >= 10) return 10;
-  if (stackCount >= 6) return 5;
-  return 0;
-}
-
-function unitPrice(p, stackCount) {
-  const discount = getDiscountPercent(stackCount);
-  const originalPrice = Number(p.price);
-
-  return roundMoney(originalPrice * (1 - discount / 100));
-}
-
-function isOffer(p) {
-  return true;
-}
-
-
-function stackText(p) {
-  return `${p.stackSize} items per stack`;
 }
 
 // Produkte aus Supabase laden
@@ -167,8 +178,7 @@ async function loadProducts() {
       category,
       price,
       stack_size,
-      is_active,
-      product_discounts(min_quantity,price)
+      is_active
     `)
     .eq("is_active", true)
     .order("name");
@@ -191,14 +201,7 @@ async function loadProducts() {
     category: p.category,
     desc: p.description || "",
     price: Number(p.price),
-    stackSize: Number(p.stack_size || 64),
-
-    discounts: (p.product_discounts || [])
-      .map(d => ({
-        min: Number(d.min_quantity),
-        price: Number(d.price)
-      }))
-      .sort((a, b) => a.min - b.min)
+    stackSize: Number(p.stack_size || 64)
   }));
 
   renderOffers();
@@ -208,8 +211,7 @@ async function loadProducts() {
 
 // Angebotsbereich
 function renderOffers() {
-  const discounted = products.filter(isOffer);
-  const selected = (discounted.length ? discounted : products).slice(0, 3);
+  const selected = products.slice(0, 3);
 
   $("offers-grid").innerHTML = selected.length
     ? selected.map(p => `
@@ -219,10 +221,7 @@ function renderOffers() {
         </div>
 
         <div class="offer-copy">
-          <div class="offer-kicker">
-            ${isOffer(p) ? "QUANTITY DEAL" : "FEATURED PRODUCT"}
-          </div>
-
+          <div class="offer-kicker">QUANTITY DEAL</div>
           <h3>${escapeHTML(p.name)}</h3>
 
           <div class="offer-price">
@@ -232,7 +231,7 @@ function renderOffers() {
           <small>${stackText(p)}</small>
         </div>
 
-        ${isOffer(p) ? '<span class="offer-badge">OFFER</span>' : ""}
+        <span class="offer-badge">OFFER</span>
       </article>
     `).join("")
     : '<div class="loading-card">No products are available yet. Check back soon.</div>';
@@ -260,7 +259,6 @@ function renderProducts() {
 
       <div class="product-info">
         <h3>${escapeHTML(p.name)}</h3>
-
         <p>${escapeHTML(p.desc)}</p>
 
         <div class="price-row">
@@ -277,9 +275,9 @@ function renderProducts() {
 
         <small class="stack-info">${stackText(p)}</small>
 
-        ${p.discounts.length
-          ? '<div class="discount-note">↘ Quantity discounts available</div>'
-          : ""}
+        <div class="discount-note">
+          ↘ Quantity discounts: up to 15%
+        </div>
       </div>
     </article>
   `).join("") || '<p class="muted">No matching products found.</p>';
@@ -289,18 +287,18 @@ function renderProducts() {
   );
 }
 
-// Einen Stack in den Warenkorb legen
+// Einen Stack hinzufügen
 function addToCart(id) {
-  cart[id] = (cart[id] || 0) + 1;
+  cart[id] = (Number(cart[id]) || 0) + 1;
 
   saveCart();
   renderCart();
   openCart();
 }
 
-// Anzahl im Warenkorb verändern
+// Stack-Anzahl verändern
 function changeQty(id, delta) {
-  cart[id] = (cart[id] || 0) + delta;
+  cart[id] = (Number(cart[id]) || 0) + delta;
 
   if (cart[id] <= 0) {
     delete cart[id];
@@ -318,18 +316,21 @@ function saveCart() {
 // Gesamte Warenkorb-Berechnung
 function getCartTotals() {
   const entries = Object.entries(cart).filter(([id, q]) =>
-    products.some(p => String(p.id) === id) && Number(q) > 0
+    products.some(p => String(p.id) === String(id)) &&
+    Number(q) > 0
   );
 
   let total = 0;
   let originalTotal = 0;
 
   entries.forEach(([id, q]) => {
-    const p = products.find(x => String(x.id) === id);
-    const discountedPrice = unitPrice(p, Number(q));
+    const p = products.find(x => String(x.id) === String(id));
+    const quantity = Number(q);
 
-    total += discountedPrice * Number(q);
-    originalTotal += Number(p.price) * Number(q);
+    const discountedPrice = unitPrice(p, quantity);
+
+    total += discountedPrice * quantity;
+    originalTotal += Number(p.price) * quantity;
   });
 
   total = roundMoney(total);
@@ -349,7 +350,8 @@ function getCartTotals() {
 // Warenkorb anzeigen
 function renderCart() {
   const entries = Object.entries(cart).filter(([id, q]) =>
-    products.some(p => String(p.id) === id) && Number(q) > 0
+    products.some(p => String(p.id) === String(id)) &&
+    Number(q) > 0
   );
 
   let total = 0;
@@ -358,19 +360,21 @@ function renderCart() {
 
   $("cart-items").innerHTML = entries.length
     ? entries.map(([id, q]) => {
-        const p = products.find(x => String(x.id) === id);
+        const p = products.find(x => String(x.id) === String(id));
         const quantity = Number(q);
 
+        // Rabattstufe anhand der Stack-Anzahl
+        const discount = getDiscountPercent(quantity);
+
+        // Rabattpreis pro Stack
         const price = unitPrice(p, quantity);
+
+        // Gesamtpreise
         const sum = roundMoney(price * quantity);
         const originalSum = roundMoney(Number(p.price) * quantity);
         const saved = roundMoney(originalSum - sum);
 
         const itemCount = quantity * p.stackSize;
-
-        const discount = Number(p.price) > 0
-          ? Math.round((1 - price / Number(p.price)) * 100)
-          : 0;
 
         total += sum;
         originalTotal += originalSum;
@@ -397,7 +401,11 @@ function renderCart() {
                 <small>
                   Regular price: ${money(originalSum)}
                 </small>
-              ` : ""}
+              ` : `
+                <small>
+                  No discount yet
+                </small>
+              `}
             </div>
 
             <div class="qty">
@@ -440,18 +448,19 @@ function renderCart() {
   );
 }
 
-// Warenkorb öffnen und schließen
+// Warenkorb öffnen
 function openCart() {
   $("cart-panel").classList.add("open");
   $("overlay").classList.add("show");
 }
 
+// Warenkorb schließen
 function closeCart() {
   $("cart-panel").classList.remove("open");
   $("overlay").classList.remove("show");
 }
 
-// Kategorien
+// Kategorien auswählen
 function selectCategory(c) {
   category = c;
 
@@ -477,13 +486,13 @@ document.querySelectorAll("[data-category]").forEach(e =>
   })
 );
 
-// Suchfeld und Warenkorb-Buttons
+// Suchfeld und Buttons
 $("search").addEventListener("input", renderProducts);
 $("open-cart").onclick = openCart;
 $("close-cart").onclick = closeCart;
 $("overlay").onclick = closeCart;
 
-// Checkout-Zusammenfassung anzeigen
+// Checkout anzeigen
 function showCheckoutTotal() {
   const {
     entries,
@@ -584,35 +593,32 @@ $("send-order").onclick = () => {
   }
 
   const lines = entries.map(([id, q]) => {
-    const p = products.find(x => String(x.id) === id);
+    const p = products.find(x => String(x.id) === String(id));
     const quantity = Number(q);
 
+    const discount = getDiscountPercent(quantity);
     const price = unitPrice(p, quantity);
+
     const sum = roundMoney(price * quantity);
     const originalSum = roundMoney(Number(p.price) * quantity);
     const saved = roundMoney(originalSum - sum);
 
-    const discount = Number(p.price) > 0
-      ? Math.round((1 - price / Number(p.price)) * 100)
-      : 0;
-
     const itemCount = quantity * p.stackSize;
 
-    return [
-      `${p.name}:`,
-      `${quantity} stacks (${itemCount} items)`,
-      `Price: ${money(sum)}`,
-      discount > 0
-        ? `Discount: ${discount}% (saved ${money(saved)})`
-        : "No discount"
-    ].join(" | ");
+    return `
+${p.name}
+${quantity} stacks (${itemCount} items)
+Price: ${money(sum)}
+Discount: ${discount}%
+Saved: ${money(saved)}
+    `.trim();
   });
 
   const content = `BRAT LTD. ORDER REQUEST
 
 Minecraft Username: ${name}
 
-${lines.join("\n")}
+${lines.join("\n\n")}
 
 Original total: ${money(originalTotal)}
 Quantity discount: -${money(savings)}
@@ -642,5 +648,8 @@ Please arrange payment and delivery in-game with Brat Ltd. using KB$.`;
 };
 
 // Start
+renderCart();
+loadProducts();
+
 renderCart();
 loadProducts();
