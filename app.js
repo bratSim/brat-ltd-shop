@@ -28,18 +28,14 @@ const escapeHTML = value =>
     "'": "&#039;"
   })[char]);
 
-// Only round the final total upwards
-const roundMoney = value =>
-  Math.ceil(Number(value || 0));
+const roundMoney = value => Math.ceil(Number(value || 0));
 
-// Display prices without rounding
 const money = value =>
   `${Number(value || 0).toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
   })} KB$`;
 
-// Final checkout amount: whole KB$
 const checkoutMoney = value =>
   `${roundMoney(value).toLocaleString("en-US")} KB$`;
 
@@ -111,7 +107,6 @@ function getTextureName(name) {
 
 function productImage(product) {
   const texture = getTextureName(product.name);
-
   const isBlock = product.category === "Blocks";
   const textureType = isBlock ? "block" : "item";
 
@@ -139,7 +134,8 @@ function getManualDiscount(product) {
 }
 
 function getSalePrice(product) {
-  return Number(product.price) * (1 - getManualDiscount(product) / 100);
+  return Number(product.price || 0) *
+    (1 - getManualDiscount(product) / 100);
 }
 
 function getDiscountPercent(quantity) {
@@ -158,14 +154,35 @@ function stackText(product) {
   return `${size} items per stack`;
 }
 
+/*
+  IMPORTANT:
+  Service budgets are now included in the cart total.
+  Quantity and product discounts only apply to normal products.
+*/
+
 function getCartTotals() {
   let original = 0;
   let afterManual = 0;
   let afterQuantity = 0;
+  let serviceTotal = 0;
 
   for (const [id, quantity] of Object.entries(cart)) {
-    const product = products.find(item => String(item.id) === String(id));
-    if (!product || product.isService) continue;
+    const product = products.find(
+      item => String(item.id) === String(id)
+    );
+
+    if (!product) continue;
+
+    if (product.isService) {
+      const budget = Number(product.desiredPrice || 0);
+
+      original += budget;
+      afterManual += budget;
+      afterQuantity += budget;
+      serviceTotal += budget;
+
+      continue;
+    }
 
     const stacks = Number(quantity);
     const stackPrice = Number(product.price);
@@ -175,20 +192,45 @@ function getCartTotals() {
     afterManual += salePrice * stacks;
 
     const quantityDiscount = getDiscountPercent(stacks);
-    afterQuantity += salePrice * stacks * (1 - quantityDiscount / 100);
+
+    afterQuantity +=
+      salePrice * stacks * (1 - quantityDiscount / 100);
   }
 
   const manualSavings = original - afterManual;
-  const quantitySavings = afterManual - afterQuantity;
-  const savings = manualSavings + quantitySavings;
+
+  let normalProductManualSavings = 0;
+  let normalProductQuantitySavings = 0;
+
+  for (const [id, quantity] of Object.entries(cart)) {
+    const product = products.find(
+      item => String(item.id) === String(id)
+    );
+
+    if (!product || product.isService) continue;
+
+    const stacks = Number(quantity);
+    const salePrice = getSalePrice(product);
+
+    normalProductManualSavings +=
+      (Number(product.price) - salePrice) * stacks;
+
+    normalProductQuantitySavings +=
+      salePrice * stacks *
+      getDiscountPercent(stacks) / 100;
+  }
+
+  const quantitySavings = normalProductQuantitySavings;
+  const savings = normalProductManualSavings + quantitySavings;
 
   return {
     original,
     afterManual,
     afterQuantity,
-    manualSavings,
+    manualSavings: normalProductManualSavings,
     quantitySavings,
     savings,
+    serviceTotal,
     total: afterQuantity,
     checkoutTotal: roundMoney(afterQuantity)
   };
@@ -221,7 +263,9 @@ async function loadProducts() {
     return;
   }
 
-  const serviceProducts = products.filter(product => product.isService);
+  const serviceProducts = products.filter(
+    product => product.isService
+  );
 
   products = [...(data || []), ...serviceProducts];
 
@@ -356,7 +400,9 @@ function renderOffers() {
   }).join("");
 
   container.querySelectorAll("[data-add]").forEach(button => {
-    button.addEventListener("click", () => addToCart(button.dataset.add));
+    button.addEventListener("click", () =>
+      addToCart(button.dataset.add)
+    );
   });
 }
 
@@ -454,7 +500,9 @@ function renderProducts() {
   `).join("");
 
   container.querySelectorAll("[data-add]").forEach(button => {
-    button.addEventListener("click", () => addToCart(button.dataset.add));
+    button.addEventListener("click", () =>
+      addToCart(button.dataset.add)
+    );
   });
 
   attachProductEditorButtons(container);
@@ -528,7 +576,9 @@ function openProductEditor(product) {
 
   document.body.appendChild(modal);
 
-  $("close-product-editor").addEventListener("click", () => modal.remove());
+  $("close-product-editor").addEventListener("click", () =>
+    modal.remove()
+  );
 
   $("product-editor-form").addEventListener("submit", async event => {
     event.preventDefault();
@@ -568,7 +618,10 @@ function saveCart() {
 }
 
 function addToCart(id) {
-  const product = products.find(item => String(item.id) === String(id));
+  const product = products.find(
+    item => String(item.id) === String(id)
+  );
+
   if (!product) return;
 
   cart[id] = Number(cart[id] || 0) + 1;
@@ -623,7 +676,9 @@ function renderCart() {
   }
 
   container.innerHTML = entries.map(([id, quantity]) => {
-    const product = products.find(item => String(item.id) === String(id));
+    const product = products.find(
+      item => String(item.id) === String(id)
+    );
 
     if (product.isService) {
       const hasBudget =
@@ -640,14 +695,14 @@ function renderCart() {
 
             <div class="cart-item-price">
               ${hasBudget
-                ? `Your budget: ${money(product.desiredPrice)}`
-                : "Price to be agreed"}
+                ? `Service budget: ${money(product.desiredPrice)}`
+                : "No budget specified"}
             </div>
 
             <div class="discount-note">
               ${hasBudget
-                ? "Proposed budget – final price to be confirmed"
-                : "The price will be agreed after reviewing your request"}
+                ? "Proposed service price – included in your order total"
+                : "The service can still be ordered without a budget"}
             </div>
 
             <button
@@ -665,6 +720,7 @@ function renderCart() {
     const stacks = Number(quantity);
     const discount = getDiscountPercent(stacks);
     const manualDiscount = getManualDiscount(product);
+
     const finalPrice =
       getSalePrice(product) * stacks * (1 - discount / 100);
 
@@ -717,10 +773,12 @@ function renderCart() {
 
   container.querySelectorAll("[data-remove-service]").forEach(button => {
     button.addEventListener("click", () => {
-      delete cart[button.dataset.removeService];
+      const id = button.dataset.removeService;
+
+      delete cart[id];
 
       products = products.filter(item =>
-        String(item.id) !== String(button.dataset.removeService)
+        String(item.id) !== String(id)
       );
 
       saveCart();
@@ -776,7 +834,12 @@ $("overlay")?.addEventListener("click", closeCart);
 ========================================= */
 
 function showCheckoutTotal() {
-  if (!Object.keys(cart).length) return;
+  const entries = Object.entries(cart).filter(([id, quantity]) =>
+    Number(quantity) > 0 &&
+    products.some(item => String(item.id) === String(id))
+  );
+
+  if (!entries.length) return;
 
   const totals = getCartTotals();
 
@@ -800,6 +863,13 @@ function showCheckoutTotal() {
       </div>
     ` : ""}
 
+    ${totals.serviceTotal > 0 ? `
+      <div class="total-line">
+        <span>Service budgets</span>
+        <span>${money(totals.serviceTotal)}</span>
+      </div>
+    ` : ""}
+
     <div class="total-line grand-total">
       <span>Final total</span>
       <strong>${checkoutMoney(totals.total)}</strong>
@@ -817,6 +887,8 @@ function showCheckoutTotal() {
 
     dateInput.min = localDate;
   }
+
+  setText("checkout-message", "");
 
   closeCart();
   $("order-modal")?.classList.add("show");
@@ -836,11 +908,11 @@ $("checkout-form")?.addEventListener("submit", event => {
 });
 
 async function submitOrder() {
-  const name = $("player-name").value.trim();
-  const note = $("order-note").value.trim();
-  const dueDate = $("due-date").value;
-  const district = $("delivery-district").value;
-  const address = $("delivery-address").value.trim();
+  const name = $("player-name")?.value.trim();
+  const note = $("order-note")?.value.trim();
+  const dueDate = $("due-date")?.value;
+  const district = $("delivery-district")?.value;
+  const address = $("delivery-address")?.value.trim();
 
   if (!name || !dueDate || !district || !address) {
     setText("checkout-message", "Please complete all required fields.");
@@ -863,40 +935,115 @@ async function submitOrder() {
     return;
   }
 
+  const entries = Object.entries(cart).filter(([id, quantity]) =>
+    Number(quantity) > 0 &&
+    products.some(item => String(item.id) === String(id))
+  );
+
+  if (!entries.length) {
+    setText("checkout-message", "Your cart is empty.");
+    return;
+  }
+
   const totals = getCartTotals();
 
-  const items = Object.entries(cart).map(([id, quantity]) => {
-    const product = products.find(item => String(item.id) === String(id));
+  const cartProducts = entries.map(([id, quantity]) =>
+    products.find(item => String(item.id) === String(id))
+  );
+
+  const hasServices = cartProducts.some(product => product.isService);
+
+  /*
+    Every cart entry is now included in ONE order.
+    Services and regular products can be ordered together.
+  */
+
+  const items = entries.map(([id, quantity]) => {
+    const product = products.find(
+      item => String(item.id) === String(id)
+    );
+
+    if (product.isService) {
+      const budget = Number(product.desiredPrice || 0);
+
+      return {
+        id: product.id,
+        name: product.name,
+        category: "Services",
+        quantity: 1,
+        price: budget,
+        final_price: budget,
+        is_service: true,
+        description: product.description || "",
+        desired_price: product.desiredPrice,
+        links: product.links || [],
+        image_urls: product.imageUrls || []
+      };
+    }
+
+    const stacks = Number(quantity);
+    const quantityDiscount = getDiscountPercent(stacks);
+    const finalPrice =
+      getSalePrice(product) *
+      stacks *
+      (1 - quantityDiscount / 100);
 
     return {
       id: product.id,
       name: product.name,
       category: product.category,
-      quantity: Number(quantity),
+      quantity: stacks,
       price: Number(product.price),
       discount_percent: getManualDiscount(product),
-      quantity_discount_percent: getDiscountPercent(Number(quantity)),
-      final_price:
-        getSalePrice(product) *
-        Number(quantity) *
-        (1 - getDiscountPercent(Number(quantity)) / 100)
+      quantity_discount_percent: quantityDiscount,
+      final_price: finalPrice,
+      is_service: false
     };
   });
+
+  const serviceProducts = cartProducts.filter(
+    product => product.isService
+  );
+
+  const descriptions = serviceProducts.map(product =>
+    `${product.name}\n${product.description || ""}`
+  );
+
+  const allLinks = serviceProducts.flatMap(product =>
+    product.links || []
+  );
+
+  const allImages = serviceProducts.flatMap(product =>
+    product.imageUrls || []
+  );
+
+  const serviceBudgets = serviceProducts
+    .map(product => Number(product.desiredPrice || 0))
+    .filter(value => value > 0);
 
   const payload = {
     user_id: currentSession?.user?.id || null,
     minecraft_name: name,
     note: note || null,
     status: "pending",
-    request_type: "order",
+    request_type: hasServices ? "service" : "order",
     items,
-    description: null,
-    links: [],
-    image_urls: [],
-    desired_price: null,
+
+    description: descriptions.length
+      ? descriptions.join("\n\n---\n\n")
+      : null,
+
+    links: allLinks,
+    image_urls: allImages,
+
+    desired_price: serviceBudgets.length
+      ? serviceBudgets.reduce((sum, value) => sum + value, 0)
+      : null,
+
     subtotal: totals.original,
     discount_amount: totals.savings,
     total: totals.checkoutTotal,
+
     due_date: dueDate,
     delivery_district: district,
     delivery_address: address
@@ -909,29 +1056,51 @@ async function submitOrder() {
     submitButton.textContent = "Submitting...";
   }
 
-  const { error } = await supabaseClient
-    .from("orders")
-    .insert(payload);
+  setText("checkout-message", "");
 
-  if (submitButton) {
-    submitButton.disabled = false;
-    submitButton.textContent = "Place order →";
+  try {
+    const { error } = await supabaseClient
+      .from("orders")
+      .insert(payload);
+
+    if (error) {
+      console.error("Order submission error:", error);
+
+      setText(
+        "checkout-message",
+        `Could not place order: ${error.message}`
+      );
+
+      return;
+    }
+
+    cart = {};
+    saveCart();
+    renderCart();
+
+    $("checkout-form")?.reset();
+    $("order-modal")?.classList.remove("show");
+
+    alert(
+      hasServices
+        ? "Your order and service request have been submitted successfully!"
+        : "Your order has been submitted successfully!"
+    );
+
+  } catch (error) {
+    console.error("Unexpected checkout error:", error);
+
+    setText(
+      "checkout-message",
+      `An unexpected error occurred: ${error.message || error}`
+    );
+
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Place order →";
+    }
   }
-
-  if (error) {
-    console.error(error);
-    setText("checkout-message", `Could not place order: ${error.message}`);
-    return;
-  }
-
-  cart = {};
-  saveCart();
-  renderCart();
-
-  $("checkout-form").reset();
-  $("order-modal").classList.remove("show");
-
-  alert("Your order has been submitted successfully!");
 }
 
 /* =========================================
@@ -1056,12 +1225,10 @@ async function checkAdmin() {
     $("admin-login-open")?.classList.add("is-admin");
 
     updateRequestsNav();
-
     renderProducts();
     renderOffers();
   } else {
     $("admin-login-open")?.classList.remove("is-admin");
-
     updateRequestsNav();
   }
 }
@@ -1199,16 +1366,24 @@ function renderRequests() {
         </div>
 
         <div class="request-content">
-          <h4>${request.request_type === "service" ? "Service request" : "Order items"}</h4>
+          <h4>${request.request_type === "service" ? "Order / service request" : "Order items"}</h4>
 
           ${items.map(item => `
             <div class="request-item">
               <span>
                 ${escapeHTML(item.name)} × ${Number(item.quantity || 1)}
+                ${item.is_service ? " (Service)" : ""}
               </span>
 
               <span>${money(item.final_price ?? item.price ?? 0)}</span>
             </div>
+
+            ${item.is_service && item.description ? `
+              <div class="request-description">
+                <strong>Service description:</strong>
+                <p>${escapeHTML(item.description)}</p>
+              </div>
+            ` : ""}
           `).join("")}
 
           ${request.description ? `
@@ -1227,7 +1402,7 @@ function renderRequests() {
 
           ${request.desired_price != null ? `
             <p>
-              <strong>Desired budget:</strong>
+              <strong>Desired service budget:</strong>
               ${money(request.desired_price)}
             </p>
           ` : ""}
@@ -1472,6 +1647,16 @@ async function addServiceRequestToCart(event) {
   const files = Array.from($("service-images").files || []);
   const desiredPrice = $("service-budget").value;
 
+  if (!title || !description) {
+    setText("service-message", "Please enter a title and description.");
+    return;
+  }
+
+  if (desiredPrice !== "" && Number(desiredPrice) < 0) {
+    setText("service-message", "Please enter a valid budget.");
+    return;
+  }
+
   if (files.length > 5) {
     setText("service-message", "You can upload a maximum of 5 images.");
     return;
@@ -1487,183 +1672,77 @@ async function addServiceRequestToCart(event) {
     return;
   }
 
-  const imageUrls = [];
-
-  for (const file of files) {
-    const fileName =
-      `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-
-    const { data, error } = await supabaseClient.storage
-      .from("service-attachments")
-      .upload(fileName, file);
-
-    if (error) {
-      setText("service-message", `Image upload failed: ${error.message}`);
-      return;
-    }
-
-    const { data: publicData } = supabaseClient.storage
-      .from("service-attachments")
-      .getPublicUrl(data.path);
-
-    imageUrls.push(publicData.publicUrl);
-  }
-
-  const serviceProduct = {
-    id: `service-${Date.now()}`,
-    name: title,
-    category: "Services",
-    description,
-    price: Number(desiredPrice || 0),
-    stack_size: 1,
-    discount_percent: 0,
-    isService: true,
-    links,
-    imageUrls,
-    desiredPrice: desiredPrice !== "" ? Number(desiredPrice) : null
-  };
-
-  cart[serviceProduct.id] = 1;
-  products.push(serviceProduct);
-
-  saveCart();
-  renderCart();
-
-  setText(
-    "service-message",
-    "Service request added to cart. Continue to checkout to submit it."
+  const submitButton = event.target.querySelector(
+    'button[type="submit"]'
   );
-
-  event.target.reset();
-}
-
-/* =========================================
-   SERVICE ORDER SUBMISSION
-========================================= */
-
-const originalSubmitOrder = submitOrder;
-
-submitOrder = async function() {
-  const serviceEntry = Object.entries(cart).find(([id]) => {
-    const product = products.find(item => String(item.id) === String(id));
-    return product?.isService;
-  });
-
-  if (!serviceEntry) {
-    await originalSubmitOrder();
-    return;
-  }
-
-  const name = $("player-name").value.trim();
-  const note = $("order-note").value.trim();
-  const dueDate = $("due-date").value;
-  const district = $("delivery-district").value;
-  const address = $("delivery-address").value.trim();
-
-  if (!name || !dueDate || !district || !address) {
-    setText("checkout-message", "Please complete all required fields.");
-    return;
-  }
-
-  const today = new Date();
-
-  const todayString = new Date(
-    today.getTime() - today.getTimezoneOffset() * 60000
-  ).toISOString().slice(0, 10);
-
-  if (dueDate < todayString) {
-    setText("checkout-message", "Please select a future date.");
-    return;
-  }
-
-  if (address.length < 2) {
-    setText("checkout-message", "Please enter a valid delivery address.");
-    return;
-  }
-
-  const [serviceId] = serviceEntry;
-
-  const service = products.find(item =>
-    String(item.id) === String(serviceId)
-  );
-
-  const otherItems = Object.entries(cart).filter(([id]) =>
-    String(id) !== String(serviceId)
-  );
-
-  if (otherItems.length) {
-    setText(
-      "checkout-message",
-      "Please submit service requests separately from regular products."
-    );
-    return;
-  }
-
-  const payload = {
-    user_id: currentSession?.user?.id || null,
-    minecraft_name: name,
-    note: note || null,
-    status: "pending",
-    request_type: "service",
-
-    items: [{
-      id: service.id,
-      name: service.name,
-      quantity: 1,
-      price: 0,
-      final_price: 0
-    }],
-
-    description: service.description,
-    links: service.links || [],
-    image_urls: service.imageUrls || [],
-    desired_price: service.desiredPrice,
-
-    subtotal: 0,
-    discount_amount: 0,
-    total: 0,
-
-    due_date: dueDate,
-    delivery_district: district,
-    delivery_address: address
-  };
-
-  const submitButton = $("send-order");
 
   if (submitButton) {
     submitButton.disabled = true;
-    submitButton.textContent = "Submitting...";
+    submitButton.textContent = "Uploading...";
   }
 
-  const { error } = await supabaseClient
-    .from("orders")
-    .insert(payload);
+  try {
+    const imageUrls = [];
 
-  if (submitButton) {
-    submitButton.disabled = false;
-    submitButton.textContent = "Place order →";
-  }
+    for (const file of files) {
+      const fileName =
+        `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
-  if (error) {
+      const { data, error } = await supabaseClient.storage
+        .from("service-attachments")
+        .upload(fileName, file);
+
+      if (error) {
+        throw new Error(`Image upload failed: ${error.message}`);
+      }
+
+      const { data: publicData } = supabaseClient.storage
+        .from("service-attachments")
+        .getPublicUrl(data.path);
+
+      imageUrls.push(publicData.publicUrl);
+    }
+
+    const serviceProduct = {
+      id: `service-${Date.now()}`,
+      name: title,
+      category: "Services",
+      description,
+      price: Number(desiredPrice || 0),
+      stack_size: 1,
+      discount_percent: 0,
+      isService: true,
+      links,
+      imageUrls,
+      desiredPrice: desiredPrice !== ""
+        ? Number(desiredPrice)
+        : null
+    };
+
+    cart[serviceProduct.id] = 1;
+    products.push(serviceProduct);
+
+    saveCart();
+    renderCart();
+
     setText(
-      "checkout-message",
-      `Could not submit request: ${error.message}`
+      "service-message",
+      "Service request added to cart. Your budget will be included in the order total."
     );
-    return;
+
+    event.target.reset();
+
+  } catch (error) {
+    console.error(error);
+    setText("service-message", error.message || "Could not add service request.");
+
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Add service request to cart →";
+    }
   }
-
-  cart = {};
-
-  products = products.filter(item => !item.isService);
-
-  saveCart();
-  renderCart();
-
-  $("checkout-form").reset();
-  $("order-modal").classList.remove("show");
-
-  alert("Your service request has been submitted successfully!");
-};
+}
 
 /* =========================================
    STARTUP
