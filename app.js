@@ -41,7 +41,7 @@ function escapeHTML(value) {
 }
 
 function money(n) {
-  return `${Math.round(Number(n)).toLocaleString("en-US")} KB$`;
+  return `${Math.ceil(Number(n)).toLocaleString("en-US")} KB$`;
 }
 
 function itemTextureId(name) {
@@ -59,7 +59,7 @@ function imageMarkup(name, cat, cls = "") {
   return `<img class="${cls}" src="${textureUrl(name)}" alt="${escapeHTML(name)}" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'fallback-icon',textContent:'${fallback}'}))">`;
 }
 
-// Price is always calculated per stack.
+// Price is calculated per stack and rounded up to whole KB$.
 function unitPrice(p, stackCount) {
   let price = Number(p.price);
 
@@ -69,7 +69,7 @@ function unitPrice(p, stackCount) {
     }
   }
 
-  return Math.round(price);
+  return Math.ceil(price * 10) / 10;
 }
 
 function isOffer(p) {
