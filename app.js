@@ -231,11 +231,29 @@ function renderOffers() {
 // PRODUCT DISPLAY
 // --------------------------------
 
+
 function renderProducts() {
   const q = $("search").value.toLowerCase().trim();
 
+  // Startseite und Kategorien unterschiedlich anzeigen
+  const isHome = category === "All";
+
+  $("offers-section").style.display = isHome ? "" : "none";
+  $("shop-section").style.display = isHome ? "none" : "";
+
+  document.querySelector(".hero").style.display = isHome ? "none" : "none";
+  document.querySelector(".value-strip").style.display = "none";
+  document.querySelector(".trade-note").style.display = "none";
+
+  // Auf der Startseite keine Produktübersicht anzeigen
+  if (isHome) {
+    $("products").innerHTML = "";
+    $("result-count").textContent = "";
+    return;
+  }
+
   const shown = products.filter(p =>
-    (category === "All" || p.category === category) &&
+    p.category === category &&
     (p.name + " " + p.category + " " + p.desc)
       .toLowerCase()
       .includes(q)
@@ -275,12 +293,15 @@ function renderProducts() {
     </article>
   `).join("");
 
-  if (category === "Services" || category === "All") {
+  // Das Formular gibt es ausschließlich im Services-Reiter
+  if (category === "Services") {
     html += serviceFormMarkup();
   }
 
   $("products").innerHTML =
-    html || '<p class="muted">No matching products found.</p>';
+    html || (category === "Services"
+      ? ""
+      : '<p class="muted">No products available in this category yet.</p>');
 
   document.querySelectorAll("[data-add]").forEach(b =>
     b.addEventListener("click", () => addToCart(b.dataset.add))
@@ -292,6 +313,7 @@ function renderProducts() {
     serviceForm.addEventListener("submit", handleServiceSubmit);
   }
 }
+
 
 // --------------------------------
 // SERVICE REQUEST FORM
