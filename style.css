@@ -27,3 +27,229 @@ footer{border-top:1px solid var(--line);padding:25px max(5vw,22px);display:flex;
 @media(max-width:850px){.offers-grid{grid-template-columns:repeat(2,1fr)}.product-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:650px){.topbar{height:auto;min-height:72px;flex-wrap:wrap;gap:10px;padding:12px 5%}.brand{flex:1}.search-wrap{order:3;flex-basis:100%;max-width:none}.nav{justify-content:flex-start;gap:25px}.hero{min-height:520px}.hero-copy{width:100%;padding:42px 7%}.hero-art{width:100%;height:205px;top:auto;bottom:0;opacity:.8}.hero h1{font-size:49px}.hero-meta{margin-top:24px}.value-strip{grid-template-columns:1fr;gap:17px;margin-bottom:55px}.section-top{align-items:flex-start;flex-direction:column}.section-top h2{font-size:29px}.offers-grid{grid-template-columns:1fr}.offer-card{min-height:120px}.product-grid{grid-template-columns:repeat(2,1fr);gap:9px}.product-visual{height:130px}.product-visual img{width:65px;height:65px}.product-info{padding:11px}.trade-note{padding:20px;align-items:flex-start}footer{flex-direction:column}}
 @media(max-width:370px){.product-grid{grid-template-columns:1fr}.product-visual{height:155px}}
+
+/* =====================================
+   CLEAN CATEGORY PAGES
+===================================== */
+
+/* Navigation is the only category selector */
+.category-tabs {
+  display: none;
+}
+
+/* =====================================
+   CUSTOM SERVICE FORM
+===================================== */
+
+.service-request-card {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: 850px;
+  margin: 12px auto 30px;
+  padding: 32px;
+  background: linear-gradient(145deg, #211b16, #171412);
+  border: 1px solid #59402b;
+  box-shadow: 0 15px 40px #0004;
+}
+
+.service-request-header {
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.service-request-header h3 {
+  font: 800 27px Manrope, sans-serif;
+  letter-spacing: -1px;
+  margin: 10px 0;
+}
+
+.service-request-header h3 em {
+  color: var(--orange2);
+  font-style: normal;
+}
+
+.service-request-header p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  max-width: 520px;
+  margin: 0;
+}
+
+#service-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.service-label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  color: #e9dfd3;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.service-label span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+#service-title,
+#service-description,
+#service-link,
+#service-price,
+#service-images {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 13px 14px;
+  background: #11100f;
+  border: 1px solid #493b2e;
+  border-radius: 2px;
+  color: var(--text);
+  font: 12px 'DM Sans', sans-serif;
+  outline: none;
+  transition: border-color .2s, background .2s;
+}
+
+#service-title,
+#service-link,
+#service-price {
+  height: 45px;
+}
+
+#service-description {
+  min-height: 145px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+#service-title:focus,
+#service-description:focus,
+#service-link:focus,
+#service-price:focus,
+#service-images:focus {
+  border-color: var(--orange);
+  background: #17130f;
+}
+
+#service-form input::placeholder,
+#service-form textarea::placeholder {
+  color: #776d62;
+}
+
+#service-description,
+#service-images,
+.service-disclaimer,
+#service-form .checkout,
+#service-status,
+#service-image-preview {
+  grid-column: 1 / -1;
+}
+
+#service-images {
+  height: auto;
+  padding: 11px;
+  cursor: pointer;
+}
+
+#service-images::file-selector-button {
+  background: #49301e;
+  color: #f4c18c;
+  border: 1px solid #89532d;
+  padding: 9px 13px;
+  margin-right: 14px;
+  font: 600 11px 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+.service-image-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.service-image-preview img {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border: 1px solid #634326;
+  background: #111;
+  padding: 4px;
+}
+
+.service-disclaimer {
+  margin: 0;
+  padding: 13px 15px;
+  background: #2b2118;
+  border-left: 2px solid var(--orange);
+  color: #b9a58c;
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+#service-form .checkout {
+  margin-top: 0;
+  min-height: 48px;
+}
+
+#service-form .checkout:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+
+#service-status {
+  margin: 0;
+  color: var(--orange2);
+  font-size: 11px;
+}
+
+/* =====================================
+   SERVICE CART
+===================================== */
+
+.service-cart-line {
+  border-left: 2px solid var(--orange);
+  padding-left: 12px;
+}
+
+.cart-line .cart-discount {
+  color: #e2a65f;
+}
+
+/* =====================================
+   MOBILE
+===================================== */
+
+@media (max-width: 650px) {
+  .service-request-card {
+    padding: 20px;
+    margin-top: 5px;
+  }
+
+  .service-request-header h3 {
+    font-size: 23px;
+  }
+
+  #service-form {
+    grid-template-columns: 1fr;
+    gap: 17px;
+  }
+
+  #service-description,
+  #service-images,
+  .service-disclaimer,
+  #service-form .checkout,
+  #service-status,
+  #service-image-preview {
+    grid-column: 1;
+  }
+
+  #service-description {
+    min-height: 125px;
+  }
+}
