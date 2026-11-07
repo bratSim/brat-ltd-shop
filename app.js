@@ -41,7 +41,7 @@ function escapeHTML(value) {
 }
 
 function money(n) {
-  return `${Math.ceil(Number(n)).toLocaleString("en-US")} KB$`;
+  return `${Number(n).toFixed(1)} KB$`;
 }
 
 function itemTextureId(name) {
