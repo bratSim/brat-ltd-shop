@@ -255,11 +255,10 @@ function renderCart() {
       }).join("")
     : '<p class="empty">Your cart is empty.</p>';
 
-  const roundedTotal = Math.ceil(total);
   const savings = originalTotal - total;
 
   $("cart-count").textContent = stackCount;
-  $("cart-total").textContent = money(roundedTotal);
+  $("cart-total").textContent = money(total);
 
   if ($("cart-savings")) {
     $("cart-savings").textContent = money(savings);
