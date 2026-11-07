@@ -212,16 +212,24 @@ function renderCart() {
   );
 
   let total = 0;
+  let originalTotal = 0;
   let stackCount = 0;
 
   $("cart-items").innerHTML = entries.length
     ? entries.map(([id, q]) => {
         const p = products.find(x => String(x.id) === id);
         const price = unitPrice(p, q);
+        const originalPrice = Number(p.price);
         const sum = price * q;
+        const originalSum = originalPrice * q;
         const itemCount = q * p.stackSize;
 
+        const discount = originalPrice > 0
+          ? Math.round((1 - price / originalPrice) * 100)
+          : 0;
+
         total += sum;
+        originalTotal += originalSum;
         stackCount += q;
 
         return `
@@ -230,6 +238,12 @@ function renderCart() {
               <strong>${escapeHTML(p.name)}</strong>
               <small>${money(price)} per stack · ${money(sum)} total</small>
               <small>${q} stacks · ${itemCount} items</small>
+              ${discount > 0 ? `
+                <small class="cart-discount">
+                  ${discount}% discount · You save ${money(originalSum - sum)}
+                </small>
+                <small>Regular price: ${money(originalSum)}</small>
+              ` : ""}
             </div>
             <div class="qty">
               <button data-change="${escapeHTML(id)}" data-delta="-1">−</button>
@@ -241,8 +255,15 @@ function renderCart() {
       }).join("")
     : '<p class="empty">Your cart is empty.</p>';
 
+  const roundedTotal = Math.ceil(total);
+  const savings = originalTotal - total;
+
   $("cart-count").textContent = stackCount;
-  $("cart-total").textContent = money(total);
+  $("cart-total").textContent = money(roundedTotal);
+
+  if ($("cart-savings")) {
+    $("cart-savings").textContent = money(savings);
+  }
 
   document.querySelectorAll("[data-change]").forEach(b =>
     b.addEventListener("click", () =>
