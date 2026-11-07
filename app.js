@@ -12,7 +12,6 @@ let isAdmin = false;
 let requests = [];
 let currentRequestFilter = "all";
 let editingProductId = null;
-let serviceImages = [];
 
 /* =========================================
    HELPERS
@@ -29,11 +28,12 @@ const escapeHTML = value =>
     "'": "&#039;"
   })[char]);
 
+// Always round final amounts up to whole KB$
 const roundMoney = value =>
-  Math.ceil((Number(value) + Number.EPSILON) * 100) / 100;
+  Math.ceil(Number(value || 0));
 
 const money = value =>
-  `${Number(value || 0).toFixed(2)} KB$`;
+  `${Math.ceil(Number(value || 0))} KB$`;
 
 const checkoutMoney = value =>
   money(roundMoney(value));
@@ -156,7 +156,7 @@ function getCartTotals() {
 
   for (const [id, quantity] of Object.entries(cart)) {
     const product = products.find(item => String(item.id) === String(id));
-    if (!product) continue;
+    if (!product || product.isService) continue;
 
     const stacks = Number(quantity);
     const stackPrice = Number(product.price);
@@ -198,14 +198,24 @@ async function loadProducts() {
 
   if (error) {
     console.error("Product loading error:", error);
-    if ($("products")) $("products").innerHTML =
-      `<p class="error-message">Could not load products: ${escapeHTML(error.message)}</p>`;
-    if ($("offers-grid")) $("offers-grid").innerHTML =
-      `<p class="error-message">Could not load offers.</p>`;
+
+    if ($("products")) {
+      $("products").innerHTML =
+        `<p class="error-message">Could not load products: ${escapeHTML(error.message)}</p>`;
+    }
+
+    if ($("offers-grid")) {
+      $("offers-grid").innerHTML =
+        `<p class="error-message">Could not load offers.</p>`;
+    }
+
     return;
   }
 
-  products = data || [];
+  const serviceProducts = products.filter(product => product.isService);
+
+  products = [...(data || []), ...serviceProducts];
+
   renderOffers();
   renderProducts();
   renderCart();
@@ -225,13 +235,22 @@ function showCategory(nextCategory) {
     );
   });
 
-  if ($("offers")) $("offers").style.display =
-    nextCategory === "All" ? "" : "none";
+  const requestsTab = document.querySelector("[data-requests-tab]");
+  if (requestsTab) requestsTab.classList.remove("active");
 
-  if ($("shop")) $("shop").style.display =
-    nextCategory === "All" ? "none" : "";
+  if ($("offers")) {
+    $("offers").style.display =
+      nextCategory === "All" ? "" : "none";
+  }
 
-  if ($("admin-section")) $("admin-section").style.display = "none";
+  if ($("shop")) {
+    $("shop").style.display =
+      nextCategory === "All" ? "none" : "";
+  }
+
+  if ($("admin-section")) {
+    $("admin-section").style.display = "none";
+  }
 
   const descriptions = {
     "Blocks": "Building materials and decorative blocks.",
@@ -242,9 +261,16 @@ function showCategory(nextCategory) {
   };
 
   setText("category-title", nextCategory);
-  setText("category-description", descriptions[nextCategory] || "Browse available products.");
+  setText(
+    "category-description",
+    descriptions[nextCategory] || "Browse available products."
+  );
 
   renderProducts();
+
+  if (nextCategory === "Services") {
+    renderServiceForm();
+  }
 }
 
 document.querySelectorAll(".nav-link").forEach(link => {
@@ -262,17 +288,30 @@ function renderOffers() {
   const container = $("offers-grid");
   if (!container) return;
 
+  const search = ($("search")?.value || "").toLowerCase();
+
   const offers = products.filter(product =>
-    Number(product.discount_percent || 0) > 0
+    !product.isService &&
+    Number(product.discount_percent || 0) > 0 &&
+    (
+      product.name.toLowerCase().includes(search) ||
+      String(product.description || "").toLowerCase().includes(search)
+    )
   );
 
   if (!offers.length) {
     container.innerHTML = "";
-    if ($("empty-offers")) $("empty-offers").style.display = "";
+
+    if ($("empty-offers")) {
+      $("empty-offers").style.display = "";
+    }
+
     return;
   }
 
-  if ($("empty-offers")) $("empty-offers").style.display = "none";
+  if ($("empty-offers")) {
+    $("empty-offers").style.display = "none";
+  }
 
   container.innerHTML = offers.map(product => {
     const oldPrice = Number(product.price);
@@ -295,7 +334,11 @@ function renderOffers() {
             <span class="offer-price">${money(newPrice)}</span>
           </div>
 
-          <button class="primary-button offer-add-button" data-add="${escapeHTML(product.id)}" type="button">
+          <button
+            class="primary-button offer-add-button"
+            data-add="${escapeHTML(product.id)}"
+            type="button"
+          >
             Add to cart →
           </button>
         </div>
@@ -331,7 +374,11 @@ function adminProductButton(product) {
   if (!isAdmin) return "";
 
   return `
-    <button class="product-admin-menu" data-edit-product="${escapeHTML(product.id)}" type="button">
+    <button
+      class="product-admin-menu"
+      data-edit-product="${escapeHTML(product.id)}"
+      type="button"
+    >
       ✎ Edit
     </button>
   `;
@@ -344,7 +391,9 @@ function renderProducts() {
   const search = ($("search")?.value || "").toLowerCase();
 
   const filtered = products.filter(product => {
-    const matchesCategory = product.category === category;
+    const matchesCategory =
+      !product.isService && product.category === category;
+
     const matchesSearch =
       product.name.toLowerCase().includes(search) ||
       String(product.description || "").toLowerCase().includes(search);
@@ -354,11 +403,17 @@ function renderProducts() {
 
   if (!filtered.length) {
     container.innerHTML = "";
-    if ($("empty-products")) $("empty-products").style.display = "";
+
+    if ($("empty-products")) {
+      $("empty-products").style.display = "";
+    }
+
     return;
   }
 
-  if ($("empty-products")) $("empty-products").style.display = "none";
+  if ($("empty-products")) {
+    $("empty-products").style.display = "none";
+  }
 
   container.innerHTML = filtered.map(product => `
     <article class="product-card">
@@ -378,7 +433,11 @@ function renderProducts() {
 
         <div class="stack-info">${stackText(product)}</div>
 
-        <button class="primary-button add-button" data-add="${escapeHTML(product.id)}" type="button">
+        <button
+          class="primary-button add-button"
+          data-add="${escapeHTML(product.id)}"
+          type="button"
+        >
           Add to cart
         </button>
       </div>
@@ -429,12 +488,30 @@ function openProductEditor(product) {
         <input value="${escapeHTML(product.name)}" disabled>
 
         <label>Price per stack (64 items)</label>
-        <input id="edit-product-price" type="number" min="0" step="0.01" value="${Number(product.price)}" required>
+        <input
+          id="edit-product-price"
+          type="number"
+          min="0"
+          step="1"
+          value="${Number(product.price)}"
+          required
+        >
 
         <label>Manual discount (%)</label>
-        <input id="edit-product-discount" type="number" min="0" max="90" step="1" value="${getManualDiscount(product)}" required>
+        <input
+          id="edit-product-discount"
+          type="number"
+          min="0"
+          max="90"
+          step="1"
+          value="${getManualDiscount(product)}"
+          required
+        >
 
-        <button class="primary-button full-width" type="submit">Save changes</button>
+        <button class="primary-button full-width" type="submit">
+          Save changes
+        </button>
+
         <p id="product-editor-message" class="form-message"></p>
       </form>
     </div>
@@ -510,10 +587,15 @@ function renderCart() {
   if (!container) return;
 
   const entries = Object.entries(cart).filter(([id, quantity]) =>
-    Number(quantity) > 0 && products.some(item => String(item.id) === String(id))
+    Number(quantity) > 0 &&
+    products.some(item => String(item.id) === String(id))
   );
 
-  const count = entries.reduce((sum, [, quantity]) => sum + Number(quantity), 0);
+  const count = entries.reduce(
+    (sum, [, quantity]) => sum + Number(quantity),
+    0
+  );
+
   setText("cart-count", count);
 
   if (!entries.length) {
@@ -523,16 +605,44 @@ function renderCart() {
         <p>Your cart is empty.</p>
       </div>
     `;
-    if ($("cart-total")) $("cart-total").innerHTML = "";
+
+    if ($("cart-total")) {
+      $("cart-total").innerHTML = "";
+    }
+
     return;
   }
 
   container.innerHTML = entries.map(([id, quantity]) => {
     const product = products.find(item => String(item.id) === String(id));
+
+    if (product.isService) {
+      return `
+        <div class="cart-item">
+          <div class="cart-item-image">◈</div>
+
+          <div class="cart-item-details">
+            <h3>${escapeHTML(product.name)}</h3>
+            <div class="cart-item-price">Service request</div>
+            <div class="discount-note">Price to be agreed</div>
+
+            <button
+              class="remove-service"
+              data-remove-service="${escapeHTML(id)}"
+              type="button"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
     const stacks = Number(quantity);
     const discount = getDiscountPercent(stacks);
     const manualDiscount = getManualDiscount(product);
-    const finalPrice = getSalePrice(product) * stacks * (1 - discount / 100);
+    const finalPrice =
+      getSalePrice(product) * stacks * (1 - discount / 100);
 
     return `
       <div class="cart-item">
@@ -544,13 +654,28 @@ function renderCart() {
           <h3>${escapeHTML(product.name)}</h3>
           <div class="cart-item-price">${money(finalPrice)}</div>
 
-          ${manualDiscount > 0 ? `<div class="discount-note">Product discount: ${manualDiscount}%</div>` : ""}
-          ${discount > 0 ? `<div class="discount-note">Quantity discount: ${discount}%</div>` : ""}
+          ${manualDiscount > 0
+            ? `<div class="discount-note">Product discount: ${manualDiscount}%</div>`
+            : ""}
+
+          ${discount > 0
+            ? `<div class="discount-note">Quantity discount: ${discount}%</div>`
+            : ""}
 
           <div class="quantity-controls">
-            <button data-quantity="${escapeHTML(id)}" data-change="-1" type="button">−</button>
+            <button
+              data-quantity="${escapeHTML(id)}"
+              data-change="-1"
+              type="button"
+            >−</button>
+
             <span>${stacks}</span>
-            <button data-quantity="${escapeHTML(id)}" data-change="1" type="button">+</button>
+
+            <button
+              data-quantity="${escapeHTML(id)}"
+              data-change="1"
+              type="button"
+            >+</button>
           </div>
         </div>
       </div>
@@ -559,7 +684,23 @@ function renderCart() {
 
   container.querySelectorAll("[data-quantity]").forEach(button => {
     button.addEventListener("click", () => {
-      changeQuantity(button.dataset.quantity, Number(button.dataset.change));
+      changeQuantity(
+        button.dataset.quantity,
+        Number(button.dataset.change)
+      );
+    });
+  });
+
+  container.querySelectorAll("[data-remove-service]").forEach(button => {
+    button.addEventListener("click", () => {
+      delete cart[button.dataset.removeService];
+
+      products = products.filter(item =>
+        String(item.id) !== String(button.dataset.removeService)
+      );
+
+      saveCart();
+      renderCart();
     });
   });
 
@@ -642,10 +783,14 @@ function showCheckoutTotal() {
   `;
 
   const dateInput = $("due-date");
+
   if (dateInput) {
     const today = new Date();
-    const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
-      .toISOString().slice(0, 10);
+
+    const localDate = new Date(
+      today.getTime() - today.getTimezoneOffset() * 60000
+    ).toISOString().slice(0, 10);
+
     dateInput.min = localDate;
   }
 
@@ -661,7 +806,7 @@ document.querySelectorAll("[data-close]").forEach(button => {
   });
 });
 
-$("send-order")?.addEventListener("click", event => {
+$("checkout-form")?.addEventListener("submit", event => {
   event.preventDefault();
   submitOrder();
 });
@@ -679,8 +824,10 @@ async function submitOrder() {
   }
 
   const today = new Date();
-  const todayString = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
-    .toISOString().slice(0, 10);
+
+  const todayString = new Date(
+    today.getTime() - today.getTimezoneOffset() * 60000
+  ).toISOString().slice(0, 10);
 
   if (dueDate < todayString) {
     setText("checkout-message", "Please select a future date.");
@@ -733,15 +880,20 @@ async function submitOrder() {
   };
 
   const submitButton = $("send-order");
-  submitButton.disabled = true;
-  submitButton.textContent = "Submitting...";
+
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Submitting...";
+  }
 
   const { error } = await supabaseClient
     .from("orders")
     .insert(payload);
 
-  submitButton.disabled = false;
-  submitButton.textContent = "Place order →";
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Place order →";
+  }
 
   if (error) {
     console.error(error);
@@ -766,7 +918,7 @@ async function submitOrder() {
 $("search")?.addEventListener("input", () => {
   if (category === "All") {
     renderOffers();
-  } else {
+  } else if (category !== "Services") {
     renderProducts();
   }
 });
@@ -801,10 +953,15 @@ $("admin-login-form")?.addEventListener("submit", async event => {
 
   currentSession = data.session;
   await checkAdmin();
+
+  if (isAdmin) {
+    showAdminDashboard();
+  }
 });
 
 async function initializeAuth() {
   const { data } = await supabaseClient.auth.getSession();
+
   currentSession = data.session;
   await checkAdmin();
 
@@ -812,6 +969,47 @@ async function initializeAuth() {
     currentSession = session;
     setTimeout(() => checkAdmin(), 0);
   });
+}
+
+/* =========================================
+   ADMIN REQUESTS NAVIGATION
+========================================= */
+
+function updateRequestsNav() {
+  let requestsTab = document.querySelector("[data-requests-tab]");
+
+  if (isAdmin) {
+    if (!requestsTab) {
+      const nav = document.querySelector(".nav") ||
+                  document.querySelector("nav");
+
+      if (!nav) return;
+
+      requestsTab = document.createElement("a");
+
+      requestsTab.href = "#requests";
+      requestsTab.className = "nav-link";
+      requestsTab.textContent = "Requests";
+      requestsTab.setAttribute("data-requests-tab", "true");
+
+      nav.appendChild(requestsTab);
+
+      requestsTab.addEventListener("click", event => {
+        event.preventDefault();
+
+        document.querySelectorAll(".nav-link").forEach(link => {
+          link.classList.remove("active");
+        });
+
+        requestsTab.classList.add("active");
+        showAdminDashboard();
+      });
+    }
+
+    requestsTab.style.display = "";
+  } else if (requestsTab) {
+    requestsTab.remove();
+  }
 }
 
 async function checkAdmin() {
@@ -832,19 +1030,31 @@ async function checkAdmin() {
   $("admin-login-modal")?.classList.remove("show");
 
   if (isAdmin) {
-    $("admin-login-open").classList.add("is-admin");
+    $("admin-login-open")?.classList.add("is-admin");
+
+    updateRequestsNav();
+
     renderProducts();
     renderOffers();
   } else {
     $("admin-login-open")?.classList.remove("is-admin");
+
+    updateRequestsNav();
   }
 }
 
 $("admin-logout")?.addEventListener("click", async () => {
   await supabaseClient.auth.signOut();
+
   isAdmin = false;
   currentSession = null;
-  $("admin-section").style.display = "none";
+
+  updateRequestsNav();
+
+  if ($("admin-section")) {
+    $("admin-section").style.display = "none";
+  }
+
   showCategory("All");
 });
 
@@ -855,9 +1065,9 @@ $("admin-logout")?.addEventListener("click", async () => {
 async function showAdminDashboard() {
   if (!isAdmin) return;
 
-  $("offers").style.display = "none";
-  $("shop").style.display = "none";
-  $("admin-section").style.display = "";
+  if ($("offers")) $("offers").style.display = "none";
+  if ($("shop")) $("shop").style.display = "none";
+  if ($("admin-section")) $("admin-section").style.display = "";
 
   await loadRequests();
 }
@@ -880,7 +1090,11 @@ async function loadRequests() {
   if (!isAdmin) return;
 
   const container = $("admin-requests");
-  if (container) container.innerHTML = `<div class="loading-state">Loading requests...</div>`;
+
+  if (container) {
+    container.innerHTML =
+      `<div class="loading-state">Loading requests...</div>`;
+  }
 
   const { data, error } = await supabaseClient
     .from("orders")
@@ -889,8 +1103,12 @@ async function loadRequests() {
 
   if (error) {
     console.error(error);
-    if (container) container.innerHTML =
-      `<p class="error-message">Could not load requests: ${escapeHTML(error.message)}</p>`;
+
+    if (container) {
+      container.innerHTML =
+        `<p class="error-message">Could not load requests: ${escapeHTML(error.message)}</p>`;
+    }
+
     return;
   }
 
@@ -908,7 +1126,8 @@ function renderRequests() {
   );
 
   if (!filtered.length) {
-    container.innerHTML = `<div class="empty-state"><h3>No requests found</h3></div>`;
+    container.innerHTML =
+      `<div class="empty-state"><h3>No requests found</h3></div>`;
     return;
   }
 
@@ -921,9 +1140,15 @@ function renderRequests() {
       <article class="request-card">
         <div class="request-card-header">
           <div>
-            <div class="eyebrow">REQUEST #${escapeHTML(String(request.id).slice(0, 8))}</div>
+            <div class="eyebrow">
+              REQUEST #${escapeHTML(String(request.id).slice(0, 8))}
+            </div>
+
             <h3>${escapeHTML(request.minecraft_name || "Unknown player")}</h3>
-            <p class="muted">Submitted ${formatDate(request.created_at)}</p>
+
+            <p class="muted">
+              Submitted ${formatDate(request.created_at)}
+            </p>
           </div>
 
           <span class="request-status status-${escapeHTML(request.status)}">
@@ -933,9 +1158,21 @@ function renderRequests() {
 
         <div class="request-delivery">
           <div class="delivery-heading">DELIVERY DETAILS</div>
-          <div><strong>Desired date:</strong> ${formatDateOnly(request.due_date)}</div>
-          <div><strong>District:</strong> ${escapeHTML(request.delivery_district || "Not specified")}</div>
-          <div><strong>Address:</strong> ${escapeHTML(request.delivery_address || "Not specified")}</div>
+
+          <div>
+            <strong>Desired date:</strong>
+            ${formatDateOnly(request.due_date)}
+          </div>
+
+          <div>
+            <strong>District:</strong>
+            ${escapeHTML(request.delivery_district || "Not specified")}
+          </div>
+
+          <div>
+            <strong>Address:</strong>
+            ${escapeHTML(request.delivery_address || "Not specified")}
+          </div>
         </div>
 
         <div class="request-content">
@@ -943,7 +1180,10 @@ function renderRequests() {
 
           ${items.map(item => `
             <div class="request-item">
-              <span>${escapeHTML(item.name)} × ${Number(item.quantity || 1)}</span>
+              <span>
+                ${escapeHTML(item.name)} × ${Number(item.quantity || 1)}
+              </span>
+
               <span>${money(item.final_price ?? item.price ?? 0)}</span>
             </div>
           `).join("")}
@@ -963,15 +1203,22 @@ function renderRequests() {
           ` : ""}
 
           ${request.desired_price != null ? `
-            <p><strong>Desired budget:</strong> ${money(request.desired_price)}</p>
+            <p>
+              <strong>Desired budget:</strong>
+              ${money(request.desired_price)}
+            </p>
           ` : ""}
 
           ${links.length ? `
             <div class="request-links">
               <strong>Links:</strong>
+
               ${links.map(link => {
                 const url = safeExternalUrl(link);
-                return url ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(url)}</a>` : "";
+
+                return url
+                  ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(url)}</a>`
+                  : "";
               }).join("")}
             </div>
           ` : ""}
@@ -980,23 +1227,66 @@ function renderRequests() {
             <div class="request-images">
               ${images.map(url => {
                 const safeUrl = safeExternalUrl(url);
-                return safeUrl ? `<a href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHTML(safeUrl)}" alt="Customer attachment"></a>` : "";
+
+                return safeUrl
+                  ? `<a href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHTML(safeUrl)}" alt="Customer attachment"></a>`
+                  : "";
               }).join("")}
             </div>
           ` : ""}
         </div>
 
         <div class="request-financials">
-          <div><span>Subtotal</span><strong>${money(request.subtotal)}</strong></div>
-          <div><span>Discount</span><strong>-${money(request.discount_amount)}</strong></div>
-          <div class="request-final-total"><span>Total</span><strong>${money(request.total)}</strong></div>
+          <div>
+            <span>Subtotal</span>
+            <strong>${money(request.subtotal)}</strong>
+          </div>
+
+          <div>
+            <span>Discount</span>
+            <strong>-${money(request.discount_amount)}</strong>
+          </div>
+
+          <div class="request-final-total">
+            <span>Total</span>
+            <strong>${money(request.total)}</strong>
+          </div>
         </div>
 
         <div class="request-actions">
-          <button class="status-action" data-status-id="${escapeHTML(request.id)}" data-status="pending" type="button">Pending</button>
-          <button class="status-action" data-status-id="${escapeHTML(request.id)}" data-status="accepted" type="button">Accept</button>
-          <button class="status-action" data-status-id="${escapeHTML(request.id)}" data-status="completed" type="button">Complete</button>
-          <button class="status-action danger" data-status-id="${escapeHTML(request.id)}" data-status="rejected" type="button">Reject</button>
+          <button
+            class="status-action"
+            data-status-id="${escapeHTML(request.id)}"
+            data-status="pending"
+            type="button"
+          >Pending</button>
+
+          <button
+            class="status-action"
+            data-status-id="${escapeHTML(request.id)}"
+            data-status="accepted"
+            type="button"
+          >Accept</button>
+
+          <button
+            class="status-action"
+            data-status-id="${escapeHTML(request.id)}"
+            data-status="completed"
+            type="button"
+          >Complete</button>
+
+          <button
+            class="status-action danger"
+            data-status-id="${escapeHTML(request.id)}"
+            data-status="rejected"
+            type="button"
+          >Reject</button>
+
+          <button
+            class="status-action danger"
+            data-delete-id="${escapeHTML(request.id)}"
+            type="button"
+          >Delete</button>
         </div>
       </article>
     `;
@@ -1004,12 +1294,23 @@ function renderRequests() {
 
   container.querySelectorAll("[data-status-id]").forEach(button => {
     button.addEventListener("click", () => {
-      updateRequestStatus(button.dataset.statusId, button.dataset.status);
+      updateRequestStatus(
+        button.dataset.statusId,
+        button.dataset.status
+      );
+    });
+  });
+
+  container.querySelectorAll("[data-delete-id]").forEach(button => {
+    button.addEventListener("click", () => {
+      deleteRequest(button.dataset.deleteId);
     });
   });
 }
 
 async function updateRequestStatus(id, status) {
+  if (!isAdmin) return;
+
   const { error } = await supabaseClient
     .from("orders")
     .update({ status })
@@ -1023,6 +1324,32 @@ async function updateRequestStatus(id, status) {
   await loadRequests();
 }
 
+async function deleteRequest(id) {
+  if (!isAdmin) return;
+
+  const confirmed = confirm(
+    "Are you sure you want to permanently delete this request?"
+  );
+
+  if (!confirmed) return;
+
+  const { error } = await supabaseClient
+    .from("orders")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    alert(`Could not delete request: ${error.message}`);
+    return;
+  }
+
+  requests = requests.filter(request =>
+    String(request.id) !== String(id)
+  );
+
+  renderRequests();
+}
+
 /* =========================================
    SERVICE REQUEST FORM
 ========================================= */
@@ -1034,32 +1361,78 @@ function renderServiceForm() {
   container.innerHTML = `
     <div class="service-request-card">
       <div class="eyebrow">CUSTOM PROJECTS</div>
+
       <h2>Request a <span class="orange">service.</span></h2>
-      <p class="muted">Tell us what you need and our team will review your request.</p>
+
+      <p class="muted">
+        Tell us what you need and our team will review your request.
+      </p>
 
       <form id="service-request-form">
         <label for="service-title">Request title *</label>
-        <input id="service-title" type="text" maxlength="100" required placeholder="What do you need?">
+
+        <input
+          id="service-title"
+          type="text"
+          maxlength="100"
+          required
+          placeholder="What do you need?"
+        >
 
         <label for="service-description">Description *</label>
-        <textarea id="service-description" rows="5" maxlength="3000" required placeholder="Describe your project..."></textarea>
+
+        <textarea
+          id="service-description"
+          rows="5"
+          maxlength="3000"
+          required
+          placeholder="Describe your project..."
+        ></textarea>
 
         <label for="service-links">Reference links (optional)</label>
-        <textarea id="service-links" rows="2" placeholder="One URL per line"></textarea>
 
-        <label for="service-images">Reference images (optional, max. 5 images)</label>
-        <input id="service-images" type="file" accept="image/*" multiple>
+        <textarea
+          id="service-links"
+          rows="2"
+          placeholder="One URL per line"
+        ></textarea>
 
-        <label for="service-budget">Desired budget in KB$ (optional)</label>
-        <input id="service-budget" type="number" min="0" step="0.01" placeholder="Your budget">
+        <label for="service-images">
+          Reference images (optional, max. 5 images)
+        </label>
 
-        <button class="primary-button full-width" type="submit">Add service request to cart →</button>
+        <input
+          id="service-images"
+          type="file"
+          accept="image/*"
+          multiple
+        >
+
+        <label for="service-budget">
+          Desired budget in KB$ (optional)
+        </label>
+
+        <input
+          id="service-budget"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="Your budget"
+        >
+
+        <button class="primary-button full-width" type="submit">
+          Add service request to cart →
+        </button>
+
         <p id="service-message" class="form-message"></p>
       </form>
     </div>
   `;
 
-  $("service-request-form").addEventListener("submit", addServiceRequestToCart);
+  $("service-request-form").addEventListener(
+    "submit",
+    addServiceRequestToCart
+  );
 }
 
 async function addServiceRequestToCart(event) {
@@ -1067,6 +1440,7 @@ async function addServiceRequestToCart(event) {
 
   const title = $("service-title").value.trim();
   const description = $("service-description").value.trim();
+
   const links = $("service-links").value
     .split("\n")
     .map(item => item.trim())
@@ -1093,7 +1467,8 @@ async function addServiceRequestToCart(event) {
   const imageUrls = [];
 
   for (const file of files) {
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const fileName =
+      `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
     const { data, error } = await supabaseClient.storage
       .from("service-attachments")
@@ -1131,140 +1506,13 @@ async function addServiceRequestToCart(event) {
   saveCart();
   renderCart();
 
-  setText("service-message", "Service request added to cart. Continue to checkout to submit it.");
-  event.target.reset();
-}
-
-/* =========================================
-   SERVICE CART SUPPORT
-========================================= */
-
-const originalGetCartTotals = getCartTotals;
-
-getCartTotals = function() {
-  let original = 0;
-  let afterManual = 0;
-  let afterQuantity = 0;
-
-  for (const [id, quantity] of Object.entries(cart)) {
-    const product = products.find(item => String(item.id) === String(id));
-    if (!product) continue;
-
-    if (product.isService) continue;
-
-    const stacks = Number(quantity);
-    const salePrice = getSalePrice(product);
-    original += Number(product.price) * stacks;
-    afterManual += salePrice * stacks;
-
-    const discount = getDiscountPercent(stacks);
-    afterQuantity += salePrice * stacks * (1 - discount / 100);
-  }
-
-  const manualSavings = original - afterManual;
-  const quantitySavings = afterManual - afterQuantity;
-  const savings = manualSavings + quantitySavings;
-
-  return {
-    original,
-    afterManual,
-    afterQuantity,
-    manualSavings,
-    quantitySavings,
-    savings,
-    total: afterQuantity,
-    checkoutTotal: roundMoney(afterQuantity)
-  };
-};
-
-const originalRenderCart = renderCart;
-
-renderCart = function() {
-  const container = $("cart-items");
-  if (!container) return;
-
-  const entries = Object.entries(cart).filter(([id, quantity]) =>
-    Number(quantity) > 0 && products.some(item => String(item.id) === String(id))
+  setText(
+    "service-message",
+    "Service request added to cart. Continue to checkout to submit it."
   );
 
-  const count = entries.reduce((sum, [, quantity]) => sum + Number(quantity), 0);
-  setText("cart-count", count);
-
-  if (!entries.length) {
-    container.innerHTML = `
-      <div class="empty-cart">
-        <div class="empty-icon">🛒</div>
-        <p>Your cart is empty.</p>
-      </div>
-    `;
-    $("cart-total").innerHTML = "";
-    return;
-  }
-
-  container.innerHTML = entries.map(([id, quantity]) => {
-    const product = products.find(item => String(item.id) === String(id));
-
-    if (product.isService) {
-      return `
-        <div class="cart-item">
-          <div class="cart-item-image">◈</div>
-          <div class="cart-item-details">
-            <h3>${escapeHTML(product.name)}</h3>
-            <div class="cart-item-price">Service request</div>
-            <div class="discount-note">Price to be agreed</div>
-            <button class="remove-service" data-remove-service="${escapeHTML(id)}" type="button">Remove</button>
-          </div>
-        </div>
-      `;
-    }
-
-    const stacks = Number(quantity);
-    const discount = getDiscountPercent(stacks);
-    const manualDiscount = getManualDiscount(product);
-    const finalPrice = getSalePrice(product) * stacks * (1 - discount / 100);
-
-    return `
-      <div class="cart-item">
-        <div class="cart-item-image">${imageMarkup(product, "cart-product-image")}</div>
-        <div class="cart-item-details">
-          <h3>${escapeHTML(product.name)}</h3>
-          <div class="cart-item-price">${money(finalPrice)}</div>
-          ${manualDiscount > 0 ? `<div class="discount-note">Product discount: ${manualDiscount}%</div>` : ""}
-          ${discount > 0 ? `<div class="discount-note">Quantity discount: ${discount}%</div>` : ""}
-          <div class="quantity-controls">
-            <button data-quantity="${escapeHTML(id)}" data-change="-1" type="button">−</button>
-            <span>${stacks}</span>
-            <button data-quantity="${escapeHTML(id)}" data-change="1" type="button">+</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
-
-  container.querySelectorAll("[data-quantity]").forEach(button => {
-    button.addEventListener("click", () =>
-      changeQuantity(button.dataset.quantity, Number(button.dataset.change))
-    );
-  });
-
-  container.querySelectorAll("[data-remove-service]").forEach(button => {
-    button.addEventListener("click", () => {
-      delete cart[button.dataset.removeService];
-      products = products.filter(item => item.id !== button.dataset.removeService);
-      saveCart();
-      renderCart();
-    });
-  });
-
-  const totals = getCartTotals();
-
-  $("cart-total").innerHTML = `
-    <div class="total-line"><span>Subtotal</span><span>${money(totals.original)}</span></div>
-    ${totals.manualSavings > 0 ? `<div class="total-line discount-line"><span>Product discounts</span><span>-${money(totals.manualSavings)}</span></div>` : ""}
-    ${totals.quantitySavings > 0 ? `<div class="total-line discount-line"><span>Quantity discounts</span><span>-${money(totals.quantitySavings)}</span></div>` : ""}
-    <div class="total-line grand-total"><span>Total</span><strong>${checkoutMoney(totals.total)}</strong></div>
-  `;
-};
+  event.target.reset();
+}
 
 /* =========================================
    SERVICE ORDER SUBMISSION
@@ -1295,21 +1543,36 @@ submitOrder = async function() {
   }
 
   const today = new Date();
-  const todayString = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
-    .toISOString().slice(0, 10);
+
+  const todayString = new Date(
+    today.getTime() - today.getTimezoneOffset() * 60000
+  ).toISOString().slice(0, 10);
 
   if (dueDate < todayString) {
     setText("checkout-message", "Please select a future date.");
     return;
   }
 
-  const [serviceId] = serviceEntry;
-  const service = products.find(item => String(item.id) === String(serviceId));
+  if (address.length < 2) {
+    setText("checkout-message", "Please enter a valid delivery address.");
+    return;
+  }
 
-  const otherItems = Object.entries(cart).filter(([id]) => String(id) !== String(serviceId));
+  const [serviceId] = serviceEntry;
+
+  const service = products.find(item =>
+    String(item.id) === String(serviceId)
+  );
+
+  const otherItems = Object.entries(cart).filter(([id]) =>
+    String(id) !== String(serviceId)
+  );
 
   if (otherItems.length) {
-    setText("checkout-message", "Please submit service requests separately from regular products.");
+    setText(
+      "checkout-message",
+      "Please submit service requests separately from regular products."
+    );
     return;
   }
 
@@ -1319,6 +1582,7 @@ submitOrder = async function() {
     note: note || null,
     status: "pending",
     request_type: "service",
+
     items: [{
       id: service.id,
       name: service.name,
@@ -1326,34 +1590,49 @@ submitOrder = async function() {
       price: 0,
       final_price: 0
     }],
+
     description: service.description,
     links: service.links || [],
     image_urls: service.imageUrls || [],
     desired_price: service.desiredPrice,
+
     subtotal: 0,
     discount_amount: 0,
     total: 0,
+
     due_date: dueDate,
     delivery_district: district,
     delivery_address: address
   };
 
   const submitButton = $("send-order");
-  submitButton.disabled = true;
-  submitButton.textContent = "Submitting...";
 
-  const { error } = await supabaseClient.from("orders").insert(payload);
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Submitting...";
+  }
 
-  submitButton.disabled = false;
-  submitButton.textContent = "Place order →";
+  const { error } = await supabaseClient
+    .from("orders")
+    .insert(payload);
+
+  if (submitButton) {
+    submitButton.disabled = false;
+    submitButton.textContent = "Place order →";
+  }
 
   if (error) {
-    setText("checkout-message", `Could not submit request: ${error.message}`);
+    setText(
+      "checkout-message",
+      `Could not submit request: ${error.message}`
+    );
     return;
   }
 
   cart = {};
+
   products = products.filter(item => !item.isService);
+
   saveCart();
   renderCart();
 
@@ -1366,20 +1645,6 @@ submitOrder = async function() {
 /* =========================================
    STARTUP
 ========================================= */
-
-if (category === "Services") {
-  renderServiceForm();
-}
-
-const originalShowCategory = showCategory;
-
-showCategory = function(nextCategory) {
-  originalShowCategory(nextCategory);
-
-  if (nextCategory === "Services") {
-    renderServiceForm();
-  }
-};
 
 renderCart();
 loadProducts();
