@@ -8,6 +8,10 @@ let products = [];
 let category = "All";
 let cart = JSON.parse(localStorage.getItem("bratCart") || "{}");
 
+let currentSession = null;
+let isAdmin = false;
+let requests = [];
+
 const $ = id => document.getElementById(id);
 
 const categoryIcons = {
@@ -218,7 +222,6 @@ function renderOffers() {
 
         <div class="offer-copy">
           <div class="offer-kicker">QUANTITY DEAL</div>
-
           <h3>${escapeHTML(p.name)}</h3>
 
           <div class="offer-price">
@@ -241,16 +244,19 @@ function renderOffers() {
 function renderProducts() {
   const isHome = category === "All";
 
-  // WICHTIG: Die echten IDs aus deiner index.html verwenden
   $("offers").style.display = isHome ? "" : "none";
-  $("shop").style.display = isHome ? "none" : "";
+  $("shop").style.display =
+    !isHome && category !== "Requests" ? "" : "none";
 
-  // Andere Startseiten-Bereiche ausblenden
-  document.querySelector(".hero").style.display = "none";
-  document.querySelector(".value-strip").style.display = "none";
-  document.querySelector(".trade-note").style.display = "none";
+  $("requests-section").style.display =
+    category === "Requests" && isAdmin ? "" : "none";
 
-  // Auf Overview ausschließlich Angebote
+  if (category === "Requests") {
+    $("products").innerHTML = "";
+    $("result-count").textContent = "";
+    return;
+  }
+
   if (isHome) {
     $("products").innerHTML = "";
     $("result-count").textContent = "";
@@ -277,7 +283,6 @@ function renderProducts() {
 
       <div class="product-info">
         <h3>${escapeHTML(p.name)}</h3>
-
         <p>${escapeHTML(p.desc)}</p>
 
         <div class="price-row">
@@ -301,7 +306,6 @@ function renderProducts() {
     </article>
   `).join("");
 
-  // Das Formular erscheint ausschließlich bei Services
   if (category === "Services") {
     html += serviceFormMarkup();
   }
@@ -419,7 +423,10 @@ function serviceFormMarkup() {
   `;
 }
 
-// Image preview
+// ----------------------------------
+// IMAGE PREVIEW
+// ----------------------------------
+
 document.addEventListener("change", event => {
   if (event.target.id !== "service-images") return;
 
@@ -449,7 +456,10 @@ document.addEventListener("change", event => {
   });
 });
 
-// Upload images
+// ----------------------------------
+// UPLOAD SERVICE IMAGES
+// ----------------------------------
+
 async function uploadServiceImages(files) {
   const urls = [];
 
@@ -482,7 +492,10 @@ async function uploadServiceImages(files) {
   return urls;
 }
 
-// Add service request
+// ----------------------------------
+// ADD SERVICE TO CART
+// ----------------------------------
+
 async function handleServiceSubmit(event) {
   event.preventDefault();
 
@@ -702,6 +715,7 @@ function renderCart() {
                 ` : ""}
 
                 <small>${s.imageUrls.length} attached image(s)</small>
+
                 <small class="cart-discount">
                   Subject to approval by Brat Ltd.
                 </small>
@@ -808,6 +822,11 @@ function closeCart() {
 // ----------------------------------
 
 function selectCategory(selectedCategory) {
+  if (selectedCategory === "Requests" && !isAdmin) {
+    selectCategory("All");
+    return;
+  }
+
   category = selectedCategory;
 
   document.querySelectorAll("[data-category]").forEach(element => {
@@ -819,7 +838,15 @@ function selectCategory(selectedCategory) {
 
   renderProducts();
 
-  // Zur richtigen Seite scrollen
+  if (category === "Requests") {
+    loadRequests();
+    $("requests-section").scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+    return;
+  }
+
   const target = category === "All" ? $("offers") : $("shop");
 
   target.scrollIntoView({
@@ -844,7 +871,7 @@ document.querySelectorAll(".nav-link, .text-link").forEach(element => {
 $("search").addEventListener("input", () => {
   if (category === "All") {
     renderOffers();
-  } else {
+  } else if (category !== "Requests") {
     renderProducts();
   }
 });
@@ -862,6 +889,18 @@ $("checkout").onclick = showCheckoutTotal;
 $("close-modal").onclick = () => {
   $("order-modal").classList.remove("show");
 };
+
+$("admin-login-open").onclick = () => {
+  $("admin-login-modal").classList.add("show");
+};
+
+$("admin-login-close").onclick = () => {
+  $("admin-login-modal").classList.remove("show");
+};
+
+$("refresh-requests").onclick = loadRequests;
+
+$("admin-logout").onclick = logoutAdmin;
 
 // ----------------------------------
 // CHECKOUT
@@ -882,23 +921,7 @@ function showCheckoutTotal() {
     return;
   }
 
-  let preview = $("checkout-total-preview");
-
-  if (!preview) {
-    preview = document.createElement("div");
-    preview.id = "checkout-total-preview";
-
-    const firstInput = $("player-name");
-
-    if (firstInput && firstInput.parentElement) {
-      firstInput.parentElement.insertBefore(
-        preview,
-        firstInput
-      );
-    } else {
-      $("order-modal").prepend(preview);
-    }
-  }
+  const preview = $("checkout-total-preview");
 
   const serviceCount =
     entries.filter(e => e.type === "service").length;
@@ -922,15 +945,19 @@ function showCheckoutTotal() {
 }
 
 // ----------------------------------
-// CREATE ORDER FILE
+// SAVE ORDER TO SUPABASE
 // ----------------------------------
 
-$("send-order").onclick = () => {
-  const name = $("player-name").value.trim();
+$("send-order").onclick = submitOrder;
 
-  if (!name) {
+async function submitOrder() {
+  const button = $("send-order");
+  const name = $("player-name").value.trim();
+  const note = $("order-note").value.trim();
+
+  if (!name || name.length > 32) {
     $("order-status").textContent =
-      "Please enter your Minecraft username.";
+      "Please enter a valid Minecraft username.";
     return;
   }
 
@@ -947,26 +974,19 @@ $("send-order").onclick = () => {
     return;
   }
 
-  const lines = entries.map(entry => {
+  const items = entries.map(entry => {
     if (entry.type === "service") {
       const s = entry.service;
 
-      return `
-CUSTOM SERVICE REQUEST
-Title: ${s.title}
-
-Description:
-${s.description}
-
-Proposed price: ${money(s.price)}
-Approval: Pending review by Brat Ltd.
-
-Reference link:
-${s.link || "None"}
-
-Images:
-${s.imageUrls.length ? s.imageUrls.join("\n") : "None"}
-      `.trim();
+      return {
+        type: "service",
+        title: s.title,
+        description: s.description,
+        proposed_price: s.price,
+        link: s.link || null,
+        image_urls: s.imageUrls || [],
+        quantity: 1
+      };
     }
 
     const p = entry.product;
@@ -974,53 +994,489 @@ ${s.imageUrls.length ? s.imageUrls.join("\n") : "None"}
     const discount = getDiscountPercent(quantity);
     const price = unitPrice(p, quantity);
 
-    const sum = roundMoney(price * quantity);
-    const originalSum = roundMoney(Number(p.price) * quantity);
-    const saved = roundMoney(originalSum - sum);
-
-    return `
-${p.name}
-${quantity} stacks (${quantity * p.stackSize} items)
-Price: ${money(sum)}
-Discount: ${discount}%
-Saved: ${money(saved)}
-    `.trim();
+    return {
+      type: "product",
+      product_id: p.id,
+      name: p.name,
+      category: p.category,
+      quantity,
+      stack_size: p.stackSize,
+      original_price: p.price,
+      discounted_price: price,
+      discount_percent: discount,
+      line_total: roundMoney(price * quantity)
+    };
   });
 
-  const content = `BRAT LTD. ORDER REQUEST
+  const serviceEntries =
+    entries.filter(entry => entry.type === "service");
 
-Minecraft Username: ${name}
+  const productEntries =
+    entries.filter(entry => entry.type === "product");
 
-${lines.join("\n\n")}
+  const requestType =
+    productEntries.length > 0 ? "product" : "service";
 
-Original total: ${money(originalTotal)}
-Quantity discount: -${money(savings)}
-Discounted total: ${money(total)}
-Final total (rounded up): ${checkoutMoney(checkoutTotal)}
+  const description = serviceEntries.map(entry =>
+    `${entry.service.title}\n${entry.service.description}`
+  ).join("\n\n");
 
-Note: ${$("order-note").value.trim() || "None"}
+  const links = serviceEntries
+    .map(entry => entry.service.link)
+    .filter(Boolean);
 
-Please arrange payment and delivery in-game with Brat Ltd. using KB$.
+  const imageUrls = serviceEntries
+    .flatMap(entry => entry.service.imageUrls || []);
 
-Custom service prices are proposed prices and require approval by Brat Ltd.`;
+  const desiredPrice = serviceEntries.length
+    ? roundMoney(
+        serviceEntries.reduce(
+          (sum, entry) => sum + Number(entry.service.price),
+          0
+        )
+      )
+    : null;
 
-  const blob = new Blob([content], {
-    type: "text/plain"
-  });
+  const payload = {
+    user_id: currentSession?.user?.id || null,
+    minecraft_name: name,
+    note: note || null,
+    status: "pending",
+    request_type: requestType,
+    items,
+    description: description || null,
+    links,
+    image_urls: imageUrls,
+    desired_price: desiredPrice,
+    subtotal: originalTotal,
+    discount_amount: savings,
+    total: checkoutTotal
+  };
 
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-
-  a.href = url;
-  a.download =
-    `Brat-Ltd-Order-${name.replace(/[^a-z0-9_-]/gi, "_")}.txt`;
-
-  a.click();
-  URL.revokeObjectURL(url);
+  button.disabled = true;
+  button.textContent = "Submitting order...";
 
   $("order-status").textContent =
-    "Order request created as a text file. It has not been submitted automatically.";
-};
+    "Saving your order request...";
+
+  try {
+    const { error } = await supabaseClient
+      .from("orders")
+      .insert(payload);
+
+    if (error) throw error;
+
+    cart = {};
+    saveCart();
+    renderCart();
+
+    $("order-status").textContent =
+      "Your order has been submitted successfully!";
+
+    $("order-status").style.color = "#65c98a";
+
+    $("player-name").value = "";
+    $("order-note").value = "";
+
+    setTimeout(() => {
+      $("order-modal").classList.remove("show");
+      $("order-status").textContent = "";
+      $("order-status").style.color = "";
+    }, 2500);
+
+  } catch (error) {
+    console.error("Order submission failed:", error);
+
+    $("order-status").textContent =
+      `Could not submit order: ${error.message}`;
+
+    $("order-status").style.color = "#e47766";
+
+  } finally {
+    button.disabled = false;
+    button.innerHTML =
+      'Submit order request <span>→</span>';
+  }
+}
+
+// ----------------------------------
+// ADMIN LOGIN
+// ----------------------------------
+
+$("admin-login-form").addEventListener("submit", async event => {
+  event.preventDefault();
+
+  const button = $("admin-login-submit");
+  const email = $("admin-email").value.trim();
+  const password = $("admin-password").value;
+
+  button.disabled = true;
+  button.textContent = "Signing in...";
+
+  $("admin-login-status").textContent = "";
+
+  try {
+    const { data, error } = await supabaseClient.auth
+      .signInWithPassword({
+        email,
+        password
+      });
+
+    if (error) throw error;
+
+    currentSession = data.session;
+
+    const admin = await checkAdmin(data.user.id);
+
+    if (!admin) {
+      await supabaseClient.auth.signOut();
+
+      currentSession = null;
+      isAdmin = false;
+
+      updateAdminUI();
+
+      throw new Error(
+        "This account does not have administrator access."
+      );
+    }
+
+    $("admin-login-modal").classList.remove("show");
+    $("admin-login-form").reset();
+
+    updateAdminUI();
+    selectCategory("Requests");
+
+  } catch (error) {
+    console.error(error);
+
+    $("admin-login-status").textContent = error.message;
+
+  } finally {
+    button.disabled = false;
+    button.innerHTML = 'Sign in <span>→</span>';
+  }
+});
+
+// ----------------------------------
+// CHECK ADMIN PERMISSIONS
+// ----------------------------------
+
+async function checkAdmin(userId) {
+  const { data, error } = await supabaseClient
+    .from("admins")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Admin check failed:", error);
+    return false;
+  }
+
+  return Boolean(data);
+}
+
+function updateAdminUI() {
+  document.querySelectorAll(".admin-only").forEach(element => {
+    element.style.display = isAdmin ? "" : "none";
+  });
+
+  $("admin-login-open").style.display =
+    isAdmin ? "none" : "";
+
+  $("admin-logout").style.display =
+    isAdmin ? "" : "none";
+
+  if (!isAdmin && category === "Requests") {
+    selectCategory("All");
+  }
+}
+
+async function logoutAdmin() {
+  await supabaseClient.auth.signOut();
+
+  currentSession = null;
+  isAdmin = false;
+  requests = [];
+
+  updateAdminUI();
+  selectCategory("All");
+}
+
+// ----------------------------------
+// RESTORE LOGIN SESSION
+// ----------------------------------
+
+async function initializeAuth() {
+  const { data, error } = await supabaseClient.auth.getSession();
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  currentSession = data.session;
+
+  if (currentSession) {
+    isAdmin = await checkAdmin(currentSession.user.id);
+  }
+
+  updateAdminUI();
+}
+
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  currentSession = session;
+
+  if (!session) {
+    isAdmin = false;
+    updateAdminUI();
+    return;
+  }
+
+  checkAdmin(session.user.id).then(admin => {
+    isAdmin = admin;
+    updateAdminUI();
+  });
+});
+
+// ----------------------------------
+// ADMIN: LOAD REQUESTS
+// ----------------------------------
+
+async function loadRequests() {
+  if (!isAdmin) return;
+
+  $("requests-list").innerHTML =
+    '<p class="muted">Loading requests...</p>';
+
+  $("requests-count").textContent = "Loading...";
+
+  const { data, error } = await supabaseClient
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error(error);
+
+    $("requests-list").innerHTML =
+      `<p class="muted">Could not load requests: ${escapeHTML(error.message)}</p>`;
+
+    $("requests-count").textContent = "Error loading requests";
+
+    return;
+  }
+
+  requests = data || [];
+
+  $("requests-count").textContent =
+    `${requests.length} request(s)`;
+
+  renderRequests();
+}
+
+// ----------------------------------
+// ADMIN: DISPLAY REQUESTS
+// ----------------------------------
+
+function renderRequests() {
+  if (!requests.length) {
+    $("requests-list").innerHTML =
+      '<p class="muted">No requests have been submitted yet.</p>';
+    return;
+  }
+
+  $("requests-list").innerHTML = requests.map(request => {
+    const items = Array.isArray(request.items)
+      ? request.items
+      : [];
+
+    const links = Array.isArray(request.links)
+      ? request.links
+      : [];
+
+    const images = Array.isArray(request.image_urls)
+      ? request.image_urls
+      : [];
+
+    const date = request.created_at
+      ? new Date(request.created_at).toLocaleString("en-GB")
+      : "Unknown date";
+
+    const itemHTML = items.map(item => {
+      if (item.type === "service") {
+        return `
+          <div class="request-item">
+            <strong>${escapeHTML(item.title)}</strong>
+            <small>CUSTOM SERVICE</small>
+            <p>${escapeHTML(item.description)}</p>
+            <p>Proposed price: ${money(item.proposed_price)}</p>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="request-item">
+          <strong>${escapeHTML(item.name)}</strong>
+          <small>
+            ${Number(item.quantity)} stacks ·
+            ${Number(item.discount_percent || 0)}% discount
+          </small>
+          <p>
+            ${money(item.line_total)}
+          </p>
+        </div>
+      `;
+    }).join("");
+
+    const linkHTML = links.map(link => `
+      <p>
+        <a href="${escapeHTML(link)}" target="_blank" rel="noopener noreferrer">
+          Open reference link
+        </a>
+      </p>
+    `).join("");
+
+    const imageHTML = images.map(url => `
+      <a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">
+        <img
+          src="${escapeHTML(url)}"
+          alt="Customer reference"
+          loading="lazy"
+          style="width:100px;height:100px;object-fit:cover;border-radius:8px;margin:5px"
+        >
+      </a>
+    `).join("");
+
+    return `
+      <article class="request-card">
+
+        <div class="request-card-header">
+          <div>
+            <div class="eyebrow orange">
+              ${escapeHTML(request.request_type || "product")}
+              REQUEST
+            </div>
+
+            <h3>${escapeHTML(request.minecraft_name)}</h3>
+
+            <small>${escapeHTML(date)}</small>
+          </div>
+
+          <span class="request-status status-${escapeHTML(request.status)}">
+            ${escapeHTML(request.status)}
+          </span>
+        </div>
+
+        <div class="request-details">
+          ${itemHTML || '<p>No item details available.</p>'}
+
+          ${request.description ? `
+            <div class="request-description">
+              <strong>Service description</strong>
+              <p>${escapeHTML(request.description)}</p>
+            </div>
+          ` : ""}
+
+          ${request.note ? `
+            <div class="request-note">
+              <strong>Customer note</strong>
+              <p>${escapeHTML(request.note)}</p>
+            </div>
+          ` : ""}
+
+          ${linkHTML ? `
+            <div class="request-links">
+              <strong>Reference links</strong>
+              ${linkHTML}
+            </div>
+          ` : ""}
+
+          ${imageHTML ? `
+            <div class="request-images">
+              <strong>Attached images</strong>
+              <div>${imageHTML}</div>
+            </div>
+          ` : ""}
+
+          <div class="request-financials">
+            <div>Subtotal: <strong>${money(request.subtotal || 0)}</strong></div>
+            <div>Discount: <strong>−${money(request.discount_amount || 0)}</strong></div>
+            <div>Total: <strong>${checkoutMoney(request.total || 0)}</strong></div>
+          </div>
+        </div>
+
+        <div class="request-actions">
+          ${request.status !== "accepted" && request.status !== "completed" && request.status !== "rejected" ? `
+            <button class="checkout" data-status="${request.id}" data-value="accepted">
+              Accept
+            </button>
+          ` : ""}
+
+          ${request.status === "accepted" ? `
+            <button class="checkout" data-status="${request.id}" data-value="paid">
+              Mark as paid
+            </button>
+          ` : ""}
+
+          ${request.status === "accepted" || request.status === "paid" ? `
+            <button class="checkout" data-status="${request.id}" data-value="completed">
+              Complete
+            </button>
+          ` : ""}
+
+          ${request.status === "pending" || request.status === "accepted" ? `
+            <button class="admin-reject" data-status="${request.id}" data-value="rejected">
+              Reject
+            </button>
+          ` : ""}
+        </div>
+
+      </article>
+    `;
+  }).join("");
+
+  document.querySelectorAll("[data-status]").forEach(button => {
+    button.addEventListener("click", () =>
+      updateRequestStatus(
+        button.dataset.status,
+        button.dataset.value
+      )
+    );
+  });
+}
+
+// ----------------------------------
+// ADMIN: UPDATE REQUEST STATUS
+// ----------------------------------
+
+async function updateRequestStatus(id, newStatus) {
+  const allowedStatuses = [
+    "pending",
+    "accepted",
+    "paid",
+    "completed",
+    "rejected"
+  ];
+
+  if (!isAdmin || !allowedStatuses.includes(newStatus)) {
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("orders")
+    .update({ status: newStatus })
+    .eq("id", id);
+
+  if (error) {
+    console.error(error);
+    alert(`Could not update request: ${error.message}`);
+    return;
+  }
+
+  await loadRequests();
+}
 
 // ----------------------------------
 // START
@@ -1028,3 +1484,4 @@ Custom service prices are proposed prices and require approval by Brat Ltd.`;
 
 renderCart();
 loadProducts();
+initializeAuth();
