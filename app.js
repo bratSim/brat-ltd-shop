@@ -126,21 +126,25 @@ function imageMarkup(name, cat, cls = "") {
 }
 
 // Rabattpreis pro Stack abhängig von der Stack-Anzahl
+
+function getDiscountPercent(stackCount) {
+  if (stackCount >= 16) return 15;
+  if (stackCount >= 10) return 10;
+  if (stackCount >= 6) return 5;
+  return 0;
+}
+
 function unitPrice(p, stackCount) {
-  let price = Number(p.price);
+  const discount = getDiscountPercent(stackCount);
+  const originalPrice = Number(p.price);
 
-  for (const d of p.discounts) {
-    if (stackCount >= Number(d.min)) {
-      price = Number(d.price);
-    }
-  }
-
-  return price;
+  return roundMoney(originalPrice * (1 - discount / 100));
 }
 
 function isOffer(p) {
-  return p.discounts.length > 0;
+  return true;
 }
+
 
 function stackText(p) {
   return `${p.stackSize} items per stack`;
