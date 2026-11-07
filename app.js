@@ -1,4 +1,3 @@
-
 const supabaseClient = window.supabase.createClient(
   window.SUPABASE_URL,
   window.SUPABASE_KEY
@@ -13,6 +12,8 @@ let isAdmin = false;
 let requests = [];
 let adminDashboardOpen = false;
 let currentRequestFilter = "all";
+let authCheckRun = 0;
+let editingProductId = null;
 
 const $ = id => document.getElementById(id);
 
@@ -79,7 +80,9 @@ function money(n) {
 }
 
 function roundMoney(n) {
-  return Math.round((Number(n) + Number.EPSILON) * 1000) / 1000;
+  return Math.round(
+    (Number(n) + Number.EPSILON) * 1000
+  ) / 1000;
 }
 
 function checkoutMoney(n) {
@@ -93,26 +96,29 @@ function getDiscountPercent(quantity) {
   return 0;
 }
 
-// The manual product discount is applied first.
-// The quantity discount is then applied to the reduced price.
-function unitPrice(product, quantity) {
-  const manual = Number(product.discountPercent || 0);
-  const quantityDiscount = getDiscountPercent(quantity);
-
-  const afterManual =
-    Number(product.price) * (1 - manual / 100);
-
-  return roundMoney(
-    afterManual * (1 - quantityDiscount / 100)
+function getManualDiscount(product) {
+  return Math.max(
+    0,
+    Math.min(90, Number(product.discountPercent || 0))
   );
 }
 
-function effectiveDiscount(product, quantity) {
-  const manual = Number(product.discountPercent || 0);
+function getSalePrice(product) {
+  const discount = getManualDiscount(product);
+
+  return roundMoney(
+    Number(product.price) * (1 - discount / 100)
+  );
+}
+
+// Manual discount is applied first.
+// Quantity discount is then applied to the reduced price.
+function unitPrice(product, quantity) {
+  const salePrice = getSalePrice(product);
   const quantityDiscount = getDiscountPercent(quantity);
 
   return roundMoney(
-    100 * (1 - (1 - manual / 100) * (1 - quantityDiscount / 100))
+    salePrice * (1 - quantityDiscount / 100)
   );
 }
 
@@ -123,6 +129,15 @@ function stackText(product) {
 function setText(id, value) {
   const element = $(id);
   if (element) element.textContent = value;
+}
+
+function formatDate(value) {
+  if (!value) return "Unknown date";
+
+  return new Date(value).toLocaleString("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
 }
 
 // ==================================
@@ -168,7 +183,7 @@ function imageMarkup(name, cat, cls = "") {
 }
 
 // ==================================
-// LOAD PRODUCTS
+// PRODUCT LOADING
 // ==================================
 
 async function loadProducts() {
@@ -211,62 +226,95 @@ async function loadProducts() {
     category: p.category,
     desc: p.description || "",
     price: Number(p.price),
-    discountPercent: Number(p.discount_percent || 0),
-    stackSize: Number(p.stack_size || 64)
+    stackSize: Number(p.stack_size || 64),
+    discountPercent: Number(p.discount_percent || 0)
   }));
 
   renderOffers();
   renderProducts();
   renderCart();
-
-  if (adminDashboardOpen) {
-    renderAdminProducts();
-  }
 }
 
 // ==================================
-// HOMEPAGE: MANUAL OFFERS ONLY
+// PRODUCT PRICE DISPLAY
+// ==================================
+
+function productPriceMarkup(product) {
+  const manualDiscount = getManualDiscount(product);
+  const salePrice = getSalePrice(product);
+
+  if (manualDiscount > 0) {
+    return `
+      <div class="product-prices">
+        <span class="old-price">${money(product.price)}</span>
+        <span class="price">${money(salePrice)} <small>/ stack</small></span>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="price">
+      ${money(product.price)} <small>/ stack</small>
+    </div>
+  `;
+}
+
+function adminProductButton(product) {
+  if (!isAdmin) return "";
+
+  return `
+    <button
+      class="product-admin-menu"
+      type="button"
+      data-edit-product="${escapeHTML(product.id)}"
+      title="Edit product"
+      aria-label="Edit ${escapeHTML(product.name)}"
+    >⋮</button>
+  `;
+}
+
+// ==================================
+// HOMEPAGE: DISCOUNTED OFFERS ONLY
 // ==================================
 
 function renderOffers() {
   const q = $("search").value.toLowerCase().trim();
 
-  const selected = products
-    .filter(p => Number(p.discountPercent) > 0)
-    .filter(p =>
-      (p.name + " " + p.category + " " + p.desc)
-        .toLowerCase()
-        .includes(q)
-    );
+  const selected = products.filter(product =>
+    getManualDiscount(product) > 0 &&
+    (product.name + " " + product.category + " " + product.desc)
+      .toLowerCase()
+      .includes(q)
+  );
 
   $("offers-grid").innerHTML = selected.length
-    ? selected.map(p => {
-        const salePrice = roundMoney(
-          p.price * (1 - p.discountPercent / 100)
-        );
+    ? selected.map(product => {
+        const discount = getManualDiscount(product);
+        const salePrice = getSalePrice(product);
 
         return `
           <article class="offer-card">
+            ${adminProductButton(product)}
+
             <div class="offer-image">
-              ${imageMarkup(p.name, p.category)}
+              ${imageMarkup(product.name, product.category)}
             </div>
 
             <div class="offer-copy">
               <div class="offer-kicker">SPECIAL OFFER</div>
-              <h3>${escapeHTML(p.name)}</h3>
+              <h3>${escapeHTML(product.name)}</h3>
 
-              <div class="offer-old-price">
-                ${money(p.price)}
+              <div class="offer-prices">
+                <span class="old-price">${money(product.price)}</span>
+                <span class="offer-price">
+                  ${money(salePrice)} <small>/ stack</small>
+                </span>
               </div>
 
-              <div class="offer-price">
-                ${money(salePrice)} <small>/ stack</small>
-              </div>
-
-              <small>${stackText(p)}</small>
+              <small>${stackText(product)}</small>
             </div>
 
-            <span class="offer-badge">−${p.discountPercent}%</span>
+            <span class="offer-badge">−${discount}%</span>
           </article>
         `;
       }).join("")
@@ -294,112 +342,52 @@ function renderProducts() {
 
   const q = $("search").value.toLowerCase().trim();
 
-  const shown = products.filter(p =>
-    p.category === category &&
-    (p.name + " " + p.category + " " + p.desc)
+  const shown = products.filter(product =>
+    product.category === category &&
+    (product.name + " " + product.category + " " + product.desc)
       .toLowerCase()
       .includes(q)
   );
 
   $("result-count").textContent = `${shown.length} products`;
 
-  let html = shown.map(p => {
-    const salePrice = roundMoney(
-      p.price * (1 - p.discountPercent / 100)
-    );
+  let html = shown.map(product => {
+    const discount = getManualDiscount(product);
 
     return `
       <article class="product-card">
         <div class="product-visual">
-          <span class="product-tag">${escapeHTML(p.category)}</span>
+          <span class="product-tag">${escapeHTML(product.category)}</span>
 
-          ${p.discountPercent > 0 ? `
-            <span class="product-sale-badge">−${p.discountPercent}%</span>
+          ${discount > 0 ? `
+            <span class="product-discount-badge">−${discount}%</span>
           ` : ""}
 
-          ${imageMarkup(p.name, p.category)}
+          ${adminProductButton(product)}
+
+          ${imageMarkup(product.name, product.category)}
         </div>
 
         <div class="product-info">
-          <h3>${escapeHTML(p.name)}</h3>
-          <p>${escapeHTML(p.desc)}</p>
+          <h3>${escapeHTML(product.name)}</h3>
+          <p>${escapeHTML(product.desc)}</p>
 
           <div class="price-row">
-            <div class="price-block">
-              ${p.discountPercent > 0 ? `
-                <div class="old-price">${money(p.price)}</div>
-                <div class="price">${money(salePrice)} <small>/ stack</small></div>
-              ` : `
-                <div class="price">${money(p.price)} <small>/ stack</small></div>
-              `}
-            </div>
+            ${productPriceMarkup(product)}
 
             <button
               class="add-button"
-              data-add="${escapeHTML(p.id)}"
-              aria-label="Add one stack of ${escapeHTML(p.name)} to cart"
+              data-add="${escapeHTML(product.id)}"
+              aria-label="Add one stack of ${escapeHTML(product.name)} to cart"
               type="button"
             >+</button>
           </div>
 
-          <small class="stack-info">${stackText(p)}</small>
+          <small class="stack-info">${stackText(product)}</small>
 
-          ${p.discountPercent > 0 ? `
-            <div class="discount-note">
-              Special offer: ${p.discountPercent}% off
-            </div>
-          ` : `
-            <div class="discount-note">
-              Quantity discounts: up to 15%
-            </div>
-          `}
-
-          ${isAdmin ? `
-            <details class="product-admin-menu">
-              <summary aria-label="Product settings">•••</summary>
-
-              <div class="product-admin-panel">
-                <strong>Manage product</strong>
-
-                <label>
-                  Regular price (KB$)
-                  <input
-                    type="number"
-                    min="0.001"
-                    step="0.001"
-                    value="${p.price}"
-                    data-edit-price="${escapeHTML(p.id)}"
-                  >
-                </label>
-
-                <label>
-                  Special discount (%)
-                  <input
-                    type="number"
-                    min="0"
-                    max="90"
-                    step="1"
-                    value="${p.discountPercent}"
-                    data-edit-discount="${escapeHTML(p.id)}"
-                  >
-                </label>
-
-                <button
-                  type="button"
-                  class="product-save-button"
-                  data-save-product="${escapeHTML(p.id)}"
-                >Save changes</button>
-
-                <button
-                  type="button"
-                  class="product-reset-button"
-                  data-reset-discount="${escapeHTML(p.id)}"
-                >Remove discount</button>
-
-                <p class="product-edit-status" id="edit-status-${escapeHTML(p.id)}"></p>
-              </div>
-            </details>
-          ` : ""}
+          <div class="discount-note">
+            Quantity discounts: up to 15%
+          </div>
         </div>
       </article>
     `;
@@ -421,15 +409,9 @@ function renderProducts() {
     );
   });
 
-  document.querySelectorAll("[data-save-product]").forEach(button => {
+  document.querySelectorAll("[data-edit-product]").forEach(button => {
     button.addEventListener("click", () =>
-      saveProductChanges(button.dataset.saveProduct)
-    );
-  });
-
-  document.querySelectorAll("[data-reset-discount]").forEach(button => {
-    button.addEventListener("click", () =>
-      resetProductDiscount(button.dataset.resetDiscount)
+      openProductEditor(button.dataset.editProduct)
     );
   });
 
@@ -441,42 +423,167 @@ function renderProducts() {
 }
 
 // ==================================
-// ADMIN: SAVE PRODUCT PRICE + DISCOUNT
+// ADMIN PRODUCT EDITOR
 // ==================================
 
-async function saveProductChanges(productId) {
+function createProductEditor() {
+  if ($("product-editor-modal")) return;
+
+  const modal = document.createElement("div");
+  modal.id = "product-editor-modal";
+  modal.className = "modal-backdrop";
+
+  modal.innerHTML = `
+    <div class="modal product-editor-modal">
+      <button
+        class="icon-button modal-close"
+        id="product-editor-close"
+        type="button"
+      >×</button>
+
+      <div class="eyebrow orange">BRAT LTD. ADMIN</div>
+      <h2>Edit product</h2>
+      <p class="muted">Change the regular price and set a special offer.</p>
+
+      <form id="product-editor-form">
+        <label>
+          Product name
+          <input id="edit-product-name" type="text" disabled>
+        </label>
+
+        <label>
+          Regular price (KB$)
+          <input
+            id="edit-product-price"
+            type="number"
+            min="0.001"
+            max="100000000"
+            step="0.001"
+            required
+          >
+        </label>
+
+        <label>
+          Special discount (%)
+          <input
+            id="edit-product-discount"
+            type="number"
+            min="0"
+            max="90"
+            step="1"
+            required
+          >
+        </label>
+
+        <div id="product-editor-preview" class="product-editor-preview"></div>
+
+        <p class="small muted">
+          Set the discount to 0 to remove the offer from the homepage.
+          Quantity discounts are added automatically at checkout.
+        </p>
+
+        <p id="product-editor-status" class="small muted"></p>
+
+        <button class="checkout" id="product-editor-save" type="submit">
+          Save changes <span>→</span>
+        </button>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  $("product-editor-close").addEventListener("click", closeProductEditor);
+
+  modal.addEventListener("click", event => {
+    if (event.target === modal) closeProductEditor();
+  });
+
+  $("product-editor-form").addEventListener("submit", saveProductChanges);
+
+  $("edit-product-price").addEventListener("input", updateProductEditorPreview);
+  $("edit-product-discount").addEventListener("input", updateProductEditorPreview);
+}
+
+function openProductEditor(id) {
   if (!isAdmin) return;
 
-  const priceInput = document.querySelector(
-    `[data-edit-price="${CSS.escape(String(productId))}"]`
-  );
+  const product = products.find(p => String(p.id) === String(id));
+  if (!product) return;
 
-  const discountInput = document.querySelector(
-    `[data-edit-discount="${CSS.escape(String(productId))}"]`
-  );
+  createProductEditor();
 
-  const status = $(`edit-status-${productId}`);
-  const button = document.querySelector(
-    `[data-save-product="${CSS.escape(String(productId))}"]`
-  );
+  editingProductId = product.id;
 
-  const price = Number(priceInput?.value);
-  const discount = Number(discountInput?.value);
+  $("edit-product-name").value = product.name;
+  $("edit-product-price").value = product.price;
+  $("edit-product-discount").value = getManualDiscount(product);
+  $("product-editor-status").textContent = "";
+
+  updateProductEditorPreview();
+
+  $("product-editor-modal").classList.add("show");
+}
+
+function closeProductEditor() {
+  const modal = $("product-editor-modal");
+  if (modal) modal.classList.remove("show");
+
+  editingProductId = null;
+}
+
+function updateProductEditorPreview() {
+  const price = Number($("edit-product-price").value);
+  const discount = Math.max(
+    0,
+    Math.min(90, Number($("edit-product-discount").value || 0))
+  );
 
   if (!Number.isFinite(price) || price <= 0) {
-    if (status) status.textContent = "Enter a valid price.";
+    $("product-editor-preview").innerHTML =
+      '<span class="muted">Enter a valid price to preview the offer.</span>';
+    return;
+  }
+
+  const newPrice = roundMoney(price * (1 - discount / 100));
+
+  $("product-editor-preview").innerHTML = discount > 0
+    ? `
+      <div>
+        <span class="old-price">${money(price)}</span>
+        <strong>${money(newPrice)}</strong>
+      </div>
+      <span class="product-discount-badge">−${discount}%</span>
+    `
+    : `
+      <div>
+        <strong>${money(price)}</strong>
+      </div>
+      <span class="muted">No special offer</span>
+    `;
+}
+
+async function saveProductChanges(event) {
+  event.preventDefault();
+
+  if (!isAdmin || !editingProductId) return;
+
+  const price = Number($("edit-product-price").value);
+  const discount = Number($("edit-product-discount").value);
+
+  if (!Number.isFinite(price) || price <= 0) {
+    setText("product-editor-status", "Please enter a valid price.");
     return;
   }
 
   if (!Number.isFinite(discount) || discount < 0 || discount > 90) {
-    if (status) status.textContent = "Discount must be between 0 and 90%.";
+    setText("product-editor-status", "Discount must be between 0 and 90%.");
     return;
   }
 
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Saving...";
-  }
+  const button = $("product-editor-save");
+  button.disabled = true;
+  button.textContent = "Saving...";
 
   const { error } = await supabaseClient
     .from("products")
@@ -484,141 +591,22 @@ async function saveProductChanges(productId) {
       price: roundMoney(price),
       discount_percent: discount
     })
-    .eq("id", productId);
+    .eq("id", editingProductId);
 
   if (error) {
     console.error("Product update failed:", error);
-    if (status) status.textContent = `Error: ${error.message}`;
-
-    if (button) {
-      button.disabled = false;
-      button.textContent = "Save changes";
-    }
+    setText("product-editor-status", `Could not save: ${error.message}`);
+    button.disabled = false;
+    button.innerHTML = 'Save changes <span>→</span>';
     return;
   }
 
-  await loadProducts();
-
-  if (status) status.textContent = "Saved successfully.";
-  setText("admin-status", "Product updated successfully.");
-}
-
-async function resetProductDiscount(productId) {
-  if (!isAdmin) return;
-
-  const { error } = await supabaseClient
-    .from("products")
-    .update({ discount_percent: 0 })
-    .eq("id", productId);
-
-  if (error) {
-    console.error("Discount reset failed:", error);
-    setText("admin-status", `Could not remove discount: ${error.message}`);
-    return;
-  }
+  closeProductEditor();
 
   await loadProducts();
-  setText("admin-status", "Product discount removed.");
-}
 
-// ==================================
-// ADMIN: PRODUCT OVERVIEW
-// ==================================
-
-function ensureAdminProductArea() {
-  if ($("admin-products-area")) return;
-
-  const section = $("admin-section");
-  const toolbar = section.querySelector(".admin-toolbar");
-
-  if (!section || !toolbar) return;
-
-  const area = document.createElement("div");
-  area.id = "admin-products-area";
-  area.className = "admin-products-area";
-
-  area.innerHTML = `
-    <div class="admin-toolbar">
-      <div>
-        <h2>Product management</h2>
-        <p class="muted small">
-          Change prices and manage special offers.
-        </p>
-      </div>
-    </div>
-
-    <div id="admin-product-list" class="admin-product-list"></div>
-  `;
-
-  toolbar.insertAdjacentElement("beforebegin", area);
-}
-
-function renderAdminProducts() {
-  if (!isAdmin) return;
-
-  ensureAdminProductArea();
-
-  const container = $("admin-product-list");
-  if (!container) return;
-
-  container.innerHTML = products.length
-    ? products.map(p => `
-        <article class="admin-product-row">
-          <div class="admin-product-image">
-            ${imageMarkup(p.name, p.category)}
-          </div>
-
-          <div class="admin-product-info">
-            <strong>${escapeHTML(p.name)}</strong>
-            <small>${escapeHTML(p.category)}</small>
-          </div>
-
-          <div class="admin-product-price">
-            <strong>${money(p.price)}</strong>
-            <small>Regular price</small>
-          </div>
-
-          <div class="admin-product-discount">
-            <strong>${p.discountPercent}%</strong>
-            <small>Special discount</small>
-          </div>
-
-          <button
-            class="admin-edit-button"
-            type="button"
-            data-admin-edit="${escapeHTML(p.id)}"
-          >Edit product</button>
-        </article>
-      `).join("")
-    : '<p class="muted">No products found.</p>';
-
-  container.querySelectorAll("[data-admin-edit]").forEach(button => {
-    button.addEventListener("click", () => {
-      const product = products.find(
-        p => String(p.id) === String(button.dataset.adminEdit)
-      );
-
-      if (!product) return;
-
-      showShopCategory(product.category);
-
-      setTimeout(() => {
-        const card = document.querySelector(
-          `[data-save-product="${CSS.escape(String(product.id))}"]`
-        );
-
-        const details = card?.closest(".product-admin-menu");
-
-        if (details) {
-          details.open = true;
-          details.scrollIntoView({
-            behavior: "smooth",
-            block: "center"
-          });
-        }
-      }, 100);
-    });
-  });
+  button.disabled = false;
+  button.innerHTML = 'Save changes <span>→</span>';
 }
 
 // ==================================
@@ -630,7 +618,9 @@ function serviceFormMarkup() {
     <section class="service-request-card">
       <div class="service-request-header">
         <div class="eyebrow orange">MADE FOR YOUR PROJECT</div>
+
         <h3>Request a <em>custom service.</em></h3>
+
         <p>
           Need something special? Describe your idea and
           make your own price proposal.
@@ -640,34 +630,59 @@ function serviceFormMarkup() {
       <form id="service-form">
         <label class="service-label">
           Service title
-          <input id="service-title" type="text" maxlength="80"
-            placeholder="e.g. Custom medieval castle" required>
+          <input
+            id="service-title"
+            type="text"
+            maxlength="80"
+            placeholder="e.g. Custom medieval castle"
+            required
+          >
         </label>
 
         <label class="service-label">
           Description
-          <textarea id="service-description" rows="5" maxlength="3000"
-            placeholder="Describe exactly what you need..." required></textarea>
+          <textarea
+            id="service-description"
+            rows="5"
+            maxlength="3000"
+            placeholder="Describe exactly what you need..."
+            required
+          ></textarea>
         </label>
 
         <label class="service-label">
           Reference link <span>(optional)</span>
-          <input id="service-link" type="url" maxlength="500"
-            placeholder="https://...">
+          <input
+            id="service-link"
+            type="url"
+            maxlength="500"
+            placeholder="https://..."
+          >
         </label>
 
         <label class="service-label">
           Images <span>(optional, max. 5 images, 5 MB each)</span>
-          <input id="service-images" type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif" multiple>
+          <input
+            id="service-images"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            multiple
+          >
         </label>
 
         <div id="service-image-preview" class="service-image-preview"></div>
 
         <label class="service-label">
           Your proposed price (KB$)
-          <input id="service-price" type="number" min="0.001"
-            max="100000000" step="0.001" placeholder="e.g. 150" required>
+          <input
+            id="service-price"
+            type="number"
+            min="0.001"
+            max="100000000"
+            step="0.001"
+            placeholder="e.g. 150"
+            required
+          >
         </label>
 
         <p class="service-disclaimer">
@@ -711,6 +726,7 @@ document.addEventListener("change", event => {
     const img = document.createElement("img");
     img.alt = file.name;
     img.src = URL.createObjectURL(file);
+
     preview.appendChild(img);
   });
 });
@@ -735,7 +751,9 @@ async function uploadServiceImages(files) {
       });
 
     if (error) {
-      throw new Error(`Could not upload ${file.name}: ${error.message}`);
+      throw new Error(
+        `Could not upload ${file.name}: ${error.message}`
+      );
     }
 
     const { data } = supabaseClient.storage
@@ -778,17 +796,22 @@ async function handleServiceSubmit(event) {
   }
 
   const allowedTypes = [
-    "image/png", "image/jpeg", "image/webp", "image/gif"
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "image/gif"
   ];
 
   for (const file of files) {
     if (!allowedTypes.includes(file.type)) {
-      status.textContent = "Only PNG, JPG, WEBP and GIF images are allowed.";
+      status.textContent =
+        "Only PNG, JPG, WEBP and GIF images are allowed.";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      status.textContent = `The image "${file.name}" is larger than 5 MB.`;
+      status.textContent =
+        `The image "${file.name}" is larger than 5 MB.`;
       return;
     }
   }
@@ -796,6 +819,7 @@ async function handleServiceSubmit(event) {
   if (link) {
     try {
       const parsedLink = new URL(link);
+
       if (!["http:", "https:"].includes(parsedLink.protocol)) {
         throw new Error("Invalid link");
       }
@@ -830,6 +854,7 @@ async function handleServiceSubmit(event) {
     openCart();
 
     status.textContent = "Service request added to your cart.";
+
     $("service-form").reset();
     $("service-image-preview").innerHTML = "";
 
@@ -840,7 +865,8 @@ async function handleServiceSubmit(event) {
 
   } finally {
     button.disabled = false;
-    button.innerHTML = 'Add service request to cart <span>→</span>';
+    button.innerHTML =
+      'Add service request to cart <span>→</span>';
   }
 }
 
@@ -892,7 +918,9 @@ function addToCart(id) {
 function changeQty(id, delta) {
   cart[id] = (Number(cart[id]) || 0) + delta;
 
-  if (cart[id] <= 0) delete cart[id];
+  if (cart[id] <= 0) {
+    delete cart[id];
+  }
 
   saveCart();
   renderCart();
@@ -904,45 +932,57 @@ function removeService(id) {
   renderCart();
 }
 
+// ==================================
+// CART TOTALS
+// ==================================
+
 function getCartTotals() {
   const entries = getCartEntries();
 
-  let total = 0;
   let originalTotal = 0;
-  let manualSavings = 0;
-  let quantitySavings = 0;
+  let afterManualDiscount = 0;
+  let total = 0;
 
   entries.forEach(entry => {
     if (entry.type === "service") {
-      total += Number(entry.service.price);
-      originalTotal += Number(entry.service.price);
+      const price = Number(entry.service.price);
+
+      originalTotal += price;
+      afterManualDiscount += price;
+      total += price;
       return;
     }
 
-    const p = entry.product;
+    const product = entry.product;
     const quantity = entry.quantity;
 
-    const original = Number(p.price) * quantity;
-    const afterManual =
-      Number(p.price) * (1 - Number(p.discountPercent || 0) / 100) * quantity;
+    const regularLine = Number(product.price) * quantity;
+    const saleUnit = getSalePrice(product);
+    const saleLine = saleUnit * quantity;
+    const finalLine = unitPrice(product, quantity) * quantity;
 
-    const final = unitPrice(p, quantity) * quantity;
-
-    originalTotal += original;
-    manualSavings += original - afterManual;
-    quantitySavings += afterManual - final;
-    total += final;
+    originalTotal += regularLine;
+    afterManualDiscount += saleLine;
+    total += finalLine;
   });
 
-  total = roundMoney(total);
   originalTotal = roundMoney(originalTotal);
-  manualSavings = roundMoney(manualSavings);
-  quantitySavings = roundMoney(quantitySavings);
+  afterManualDiscount = roundMoney(afterManualDiscount);
+  total = roundMoney(total);
+
+  const manualSavings = roundMoney(
+    originalTotal - afterManualDiscount
+  );
+
+  const quantitySavings = roundMoney(
+    afterManualDiscount - total
+  );
 
   return {
     entries,
-    total,
     originalTotal,
+    afterManualDiscount,
+    total,
     manualSavings,
     quantitySavings,
     savings: roundMoney(originalTotal - total),
@@ -961,74 +1001,95 @@ function renderCart() {
   $("cart-items").innerHTML = entries.length
     ? entries.map(entry => {
         if (entry.type === "service") {
-          const s = entry.service;
+          const service = entry.service;
 
           return `
             <div class="cart-line service-cart-line">
               <div>
-                <strong>${escapeHTML(s.title)}</strong>
+                <strong>${escapeHTML(service.title)}</strong>
                 <small>CUSTOM SERVICE REQUEST</small>
-                <small>${money(s.price)} · Proposed price</small>
-                <small>${escapeHTML(s.description)}</small>
-                ${s.link ? `<small>Reference: ${escapeHTML(s.link)}</small>` : ""}
-                <small>${s.imageUrls.length} attached image(s)</small>
-                <small class="cart-discount">Subject to approval by Brat Ltd.</small>
+                <small>${money(service.price)} · Proposed price</small>
+                <small>${escapeHTML(service.description)}</small>
+
+                ${service.link ? `
+                  <small>Reference: ${escapeHTML(service.link)}</small>
+                ` : ""}
+
+                <small>${service.imageUrls.length} attached image(s)</small>
+
+                <small class="cart-discount">
+                  Subject to approval by Brat Ltd.
+                </small>
               </div>
 
               <div class="qty">
-                <button data-remove-service="${escapeHTML(entry.id)}"
-                  aria-label="Remove service" type="button">×</button>
+                <button
+                  data-remove-service="${escapeHTML(entry.id)}"
+                  aria-label="Remove service"
+                  type="button"
+                >×</button>
               </div>
             </div>
           `;
         }
 
-        const p = entry.product;
+        const product = entry.product;
         const quantity = entry.quantity;
-        const discount = effectiveDiscount(p, quantity);
-        const price = unitPrice(p, quantity);
 
-        const sum = roundMoney(price * quantity);
-        const originalSum = roundMoney(Number(p.price) * quantity);
-        const saved = roundMoney(originalSum - sum);
+        const manualDiscount = getManualDiscount(product);
+        const quantityDiscount = getDiscountPercent(quantity);
+
+        const regularSum = roundMoney(product.price * quantity);
+        const saleSum = roundMoney(getSalePrice(product) * quantity);
+        const finalSum = roundMoney(unitPrice(product, quantity) * quantity);
+
+        const manualSaved = roundMoney(regularSum - saleSum);
+        const quantitySaved = roundMoney(saleSum - finalSum);
+        const totalSaved = roundMoney(regularSum - finalSum);
 
         totalStacks += quantity;
 
         return `
           <div class="cart-line">
             <div>
-              <strong>${escapeHTML(p.name)}</strong>
+              <strong>${escapeHTML(product.name)}</strong>
 
               <small>
-                ${money(price)} per stack · ${money(sum)} total
+                ${money(unitPrice(product, quantity))} per stack ·
+                ${money(finalSum)} total
               </small>
 
               <small>
-                ${quantity} stacks · ${quantity * p.stackSize} items
+                ${quantity} stacks · ${quantity * product.stackSize} items
               </small>
 
-              ${discount > 0 ? `
+              ${manualDiscount > 0 ? `
                 <small class="cart-discount">
-                  ${discount}% total discount · You save ${money(saved)}
+                  Special offer: ${manualDiscount}% · Save ${money(manualSaved)}
                 </small>
-                <small>Regular price: ${money(originalSum)}</small>
-                ${p.discountPercent > 0 ? `
-                  <small>Includes ${p.discountPercent}% special offer</small>
-                ` : ""}
-                ${getDiscountPercent(quantity) > 0 ? `
-                  <small>Plus ${getDiscountPercent(quantity)}% quantity discount</small>
-                ` : ""}
+              ` : ""}
+
+              ${quantityDiscount > 0 ? `
+                <small class="cart-discount">
+                  Quantity discount: ${quantityDiscount}% ·
+                  Save ${money(quantitySaved)}
+                </small>
+              ` : ""}
+
+              ${totalSaved > 0 ? `
+                <small>Regular price: ${money(regularSum)}</small>
+                <small class="cart-discount">
+                  Total savings: ${money(totalSaved)}
+                </small>
               ` : `
                 <small>No discount yet</small>
               `}
             </div>
 
             <div class="qty">
-              <button data-change="${escapeHTML(entry.id)}"
-                data-delta="-1" type="button">−</button>
+              <button data-change="${escapeHTML(entry.id)}" data-delta="-1" type="button">−</button>
               <b>${quantity}</b>
-              <button data-change="${escapeHTML(entry.id)}"
-                data-delta="1" type="button">+</button>
+              <button data-change="${escapeHTML(entry.id)}" data-delta="1" type="button">+</button>
             </div>
           </div>
         `;
@@ -1036,6 +1097,7 @@ function renderCart() {
     : '<p class="empty">Your cart is empty.</p>';
 
   const totals = getCartTotals();
+
   const serviceCount =
     totals.entries.filter(e => e.type === "service").length;
 
@@ -1048,7 +1110,10 @@ function renderCart() {
 
   document.querySelectorAll("[data-change]").forEach(button => {
     button.addEventListener("click", () =>
-      changeQty(button.dataset.change, Number(button.dataset.delta))
+      changeQty(
+        button.dataset.change,
+        Number(button.dataset.delta)
+      )
     );
   });
 
@@ -1113,8 +1178,6 @@ function showAdminDashboard() {
     element.classList.remove("active");
   });
 
-  renderAdminProducts();
-
   $("admin-section").scrollIntoView({
     behavior: "smooth",
     block: "start"
@@ -1145,7 +1208,7 @@ $("search").addEventListener("input", () => {
 });
 
 // ==================================
-// BUTTONS
+// MAIN BUTTONS
 // ==================================
 
 $("open-cart").addEventListener("click", openCart);
@@ -1174,10 +1237,12 @@ $("admin-refresh").addEventListener("click", loadRequests);
 $("admin-logout").addEventListener("click", logoutAdmin);
 
 // ==================================
-// CHECKOUT
+// CHECKOUT PREVIEW
 // ==================================
 
 function showCheckoutTotal() {
+  const totals = getCartTotals();
+
   const {
     entries,
     total,
@@ -1186,10 +1251,11 @@ function showCheckoutTotal() {
     quantitySavings,
     savings,
     checkoutTotal
-  } = getCartTotals();
+  } = totals;
 
   if (!entries.length) {
-    $("order-status").textContent = "Add some products to your cart first.";
+    $("order-status").textContent =
+      "Add some products to your cart first.";
     return;
   }
 
@@ -1201,12 +1267,27 @@ function showCheckoutTotal() {
   preview.innerHTML = `
     <div class="checkout-summary">
       <div>Original total: <strong>${money(originalTotal)}</strong></div>
-      <div>Special offers: <strong>−${money(manualSavings)}</strong></div>
-      <div>Quantity discounts: <strong>−${money(quantitySavings)}</strong></div>
-      <div>Total savings: <strong>−${money(savings)}</strong></div>
+
+      <div>
+        Special offer discounts:
+        <strong>−${money(manualSavings)}</strong>
+      </div>
+
+      <div>
+        Quantity discounts:
+        <strong>−${money(quantitySavings)}</strong>
+      </div>
+
+      <div>
+        Total savings:
+        <strong class="cart-discount">−${money(savings)}</strong>
+      </div>
+
       <div>Discounted total: <strong>${money(total)}</strong></div>
       <div>Custom service requests: <strong>${serviceCount}</strong></div>
+
       <hr>
+
       <div>
         Final total (rounded up):
         <strong>${checkoutMoney(checkoutTotal)}</strong>
@@ -1236,13 +1317,17 @@ async function submitOrder() {
     return;
   }
 
+  const totals = getCartTotals();
+
   const {
     entries,
     total,
     originalTotal,
     savings,
-    checkoutTotal
-  } = getCartTotals();
+    checkoutTotal,
+    manualSavings,
+    quantitySavings
+  } = totals;
 
   if (!entries.length) {
     $("order-status").textContent = "Your cart is empty.";
@@ -1251,38 +1336,40 @@ async function submitOrder() {
 
   const items = entries.map(entry => {
     if (entry.type === "service") {
-      const s = entry.service;
+      const service = entry.service;
 
       return {
         type: "service",
-        title: s.title,
-        description: s.description,
-        proposed_price: s.price,
-        link: s.link || null,
-        image_urls: s.imageUrls || [],
+        title: service.title,
+        description: service.description,
+        proposed_price: service.price,
+        link: service.link || null,
+        image_urls: service.imageUrls || [],
         quantity: 1
       };
     }
 
-    const p = entry.product;
+    const product = entry.product;
     const quantity = entry.quantity;
+
+    const manualDiscount = getManualDiscount(product);
     const quantityDiscount = getDiscountPercent(quantity);
-    const totalDiscount = effectiveDiscount(p, quantity);
-    const price = unitPrice(p, quantity);
+
+    const salePrice = getSalePrice(product);
+    const finalPrice = unitPrice(product, quantity);
 
     return {
       type: "product",
-      product_id: p.id,
-      name: p.name,
-      category: p.category,
+      product_id: product.id,
+      name: product.name,
+      category: product.category,
       quantity,
-      stack_size: p.stackSize,
-      original_price: p.price,
-      manual_discount_percent: p.discountPercent,
+      stack_size: product.stackSize,
+      original_price: product.price,
+      manual_discount_percent: manualDiscount,
       quantity_discount_percent: quantityDiscount,
-      discount_percent: totalDiscount,
-      discounted_price: price,
-      line_total: roundMoney(price * quantity)
+      discounted_price: finalPrice,
+      line_total: roundMoney(finalPrice * quantity)
     };
   });
 
@@ -1369,7 +1456,8 @@ async function submitOrder() {
 
   } finally {
     button.disabled = false;
-    button.innerHTML = 'Create order request <span>→</span>';
+    button.innerHTML =
+      'Create order request <span>→</span>';
   }
 }
 
@@ -1415,6 +1503,8 @@ $("admin-login-form").addEventListener("submit", async event => {
     $("admin-login-form").reset();
 
     updateAdminUI();
+    renderOffers();
+    renderProducts();
     showAdminDashboard();
 
   } catch (error) {
@@ -1461,10 +1551,10 @@ function updateAdminUI() {
     showShopCategory("All");
   }
 
-  renderProducts();
+  renderOffers();
 
-  if (isAdmin && adminDashboardOpen) {
-    renderAdminProducts();
+  if (!adminDashboardOpen && category !== "All") {
+    renderProducts();
   }
 }
 
@@ -1491,6 +1581,8 @@ async function logoutAdmin() {
 // ==================================
 
 async function syncAuthSession(session) {
+  const thisRun = ++authCheckRun;
+
   currentSession = session;
 
   if (!session) {
@@ -1501,7 +1593,8 @@ async function syncAuthSession(session) {
 
   const admin = await checkAdmin(session.user.id);
 
-  currentSession = session;
+  if (thisRun !== authCheckRun) return;
+
   isAdmin = admin;
   updateAdminUI();
 }
@@ -1524,7 +1617,7 @@ async function initializeAuth() {
 }
 
 // ==================================
-// ADMIN: FILTERS
+// ADMIN REQUEST FILTERS
 // ==================================
 
 document.querySelectorAll(".admin-filter").forEach(button => {
@@ -1587,60 +1680,78 @@ function renderRequests() {
 
   if (!filtered.length) {
     $("admin-requests").innerHTML =
-      '<p class="muted">No requests found in this category.</p>';
+      '<div class="admin-empty-state">No requests found in this category.</div>';
     return;
   }
 
   $("admin-requests").innerHTML = filtered.map(request => {
-    const items = Array.isArray(request.items) ? request.items : [];
-    const links = Array.isArray(request.links) ? request.links : [];
-    const images = Array.isArray(request.image_urls) ? request.image_urls : [];
+    const items = Array.isArray(request.items)
+      ? request.items
+      : [];
 
-    const date = request.created_at
-      ? new Date(request.created_at).toLocaleString("en-GB")
-      : "Unknown date";
+    const links = Array.isArray(request.links)
+      ? request.links
+      : [];
+
+    const images = Array.isArray(request.image_urls)
+      ? request.image_urls
+      : [];
 
     const itemHTML = items.map(item => {
       if (item.type === "service") {
         return `
           <div class="request-item">
-            <strong>${escapeHTML(item.title)}</strong>
-            <small>CUSTOM SERVICE</small>
+            <div class="request-item-heading">
+              <strong>${escapeHTML(item.title)}</strong>
+              <span class="request-item-type">CUSTOM SERVICE</span>
+            </div>
             <p>${escapeHTML(item.description)}</p>
-            <p>Proposed price: ${money(item.proposed_price)}</p>
+            <div class="request-item-price">
+              Proposed price: <strong>${money(item.proposed_price)}</strong>
+            </div>
           </div>
         `;
       }
 
       return `
         <div class="request-item">
-          <strong>${escapeHTML(item.name)}</strong>
-          <small>
+          <div class="request-item-heading">
+            <strong>${escapeHTML(item.name)}</strong>
+            <span class="request-item-type">PRODUCT</span>
+          </div>
+
+          <p>
             ${Number(item.quantity)} stacks ·
-            ${Number(item.discount_percent || 0)}% total discount
+            ${Number(item.quantity) * Number(item.stack_size || 64)} items
+          </p>
+
+          <div class="request-item-price">
+            ${money(item.line_total)}
+          </div>
+
+          <small class="muted">
+            Special offer: ${Number(item.manual_discount_percent || 0)}% ·
+            Quantity discount: ${Number(item.quantity_discount_percent ?? item.discount_percent ?? 0)}%
           </small>
-          <p>${money(item.line_total)}</p>
         </div>
       `;
     }).join("");
 
     const linkHTML = links.map(link => {
-      let safeLink;
+      let safeUrl;
 
       try {
         const parsed = new URL(link);
         if (!["http:", "https:"].includes(parsed.protocol)) return "";
-        safeLink = escapeHTML(parsed.href);
+        safeUrl = escapeHTML(parsed.href);
       } catch {
         return "";
       }
 
       return `
-        <p>
-          <a href="${safeLink}" target="_blank" rel="noopener noreferrer">
-            Open reference link
-          </a>
-        </p>
+        <a class="request-link" href="${safeUrl}" target="_blank" rel="noopener noreferrer">
+          Open reference link ↗
+        </a>
       `;
     }).join("");
 
@@ -1673,7 +1784,7 @@ function renderRequests() {
             </div>
 
             <h3>${escapeHTML(request.minecraft_name || "Unknown player")}</h3>
-            <small>${escapeHTML(date)}</small>
+            <small>${formatDate(request.created_at)}</small>
           </div>
 
           <span class="request-status status-${escapeHTML(status)}">
@@ -1682,8 +1793,8 @@ function renderRequests() {
         </div>
 
         <div class="request-details">
-          <div class="request-items">
-            ${itemHTML || '<p>No item details available.</p>'}
+          <div class="request-items-list">
+            ${itemHTML || '<p class="muted">No item details available.</p>'}
           </div>
 
           ${request.description ? `
@@ -1703,7 +1814,7 @@ function renderRequests() {
           ${linkHTML ? `
             <div class="request-links">
               <strong>Reference links</strong>
-              ${linkHTML}
+              <div>${linkHTML}</div>
             </div>
           ` : ""}
 
@@ -1715,29 +1826,49 @@ function renderRequests() {
           ` : ""}
 
           <div class="request-financials">
-            <div>Subtotal <strong>${money(request.subtotal || 0)}</strong></div>
-            <div>Discount <strong>−${money(request.discount_amount || 0)}</strong></div>
-            <div>Total <strong>${checkoutMoney(request.total || 0)}</strong></div>
+            <div>
+              <span>Subtotal</span>
+              <strong>${money(request.subtotal || 0)}</strong>
+            </div>
+
+            <div>
+              <span>Discount</span>
+              <strong>−${money(request.discount_amount || 0)}</strong>
+            </div>
+
+            <div class="request-total">
+              <span>Total</span>
+              <strong>${checkoutMoney(request.total || 0)}</strong>
+            </div>
           </div>
         </div>
 
         <div class="request-actions">
           ${status === "pending" ? `
-            <button class="checkout"
+            <button
+              class="request-action-accept"
               data-request-id="${escapeHTML(request.id)}"
-              data-new-status="accepted" type="button">Accept request</button>
+              data-new-status="accepted"
+              type="button"
+            >Accept request</button>
           ` : ""}
 
           ${status === "accepted" ? `
-            <button class="checkout"
+            <button
+              class="request-action-accept"
               data-request-id="${escapeHTML(request.id)}"
-              data-new-status="completed" type="button">Complete request</button>
+              data-new-status="completed"
+              type="button"
+            >Mark as completed</button>
           ` : ""}
 
           ${status === "pending" || status === "accepted" ? `
-            <button class="admin-reject"
+            <button
+              class="request-action-reject"
               data-request-id="${escapeHTML(request.id)}"
-              data-new-status="rejected" type="button">Reject</button>
+              data-new-status="rejected"
+              type="button"
+            >Reject</button>
           ` : ""}
         </div>
       </article>
@@ -1766,7 +1897,9 @@ async function updateRequestStatus(id, newStatus) {
     "rejected"
   ];
 
-  if (!isAdmin || !allowedStatuses.includes(newStatus)) return;
+  if (!isAdmin || !allowedStatuses.includes(newStatus)) {
+    return;
+  }
 
   setText("admin-status", "Updating request...");
 
