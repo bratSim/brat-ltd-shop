@@ -18,6 +18,14 @@ const categoryIcons = {
   "Services": "⌂"
 };
 
+const categoryDescriptions = {
+  "Blocks": "Building materials and blocks for your next project.",
+  "Items": "Useful items and resources for every adventure.",
+  "Armor & Weapons": "Equipment to protect yourself and fight.",
+  "Enchantments": "Enchantments and enchanted equipment.",
+  "Services": "Custom work and services made for your projects."
+};
+
 const textureAliases = {
   "oak log": "oak_log",
   "oak wood": "oak_log",
@@ -50,6 +58,10 @@ const textureAliases = {
   "enchanted book": "enchanted_book",
   "shulker box": "shulker_box"
 };
+
+// --------------------------------
+// GENERAL HELPERS
+// --------------------------------
 
 function escapeHTML(value) {
   return String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -88,17 +100,16 @@ function getDiscountPercent(stackCount) {
   return 0;
 }
 
-function unitPrice(p, stackCount) {
-  const originalPrice = Number(p.price);
+function unitPrice(product, stackCount) {
   const discount = getDiscountPercent(stackCount);
 
   return roundMoney(
-    originalPrice * (1 - discount / 100)
+    Number(product.price) * (1 - discount / 100)
   );
 }
 
-function stackText(p) {
-  return `${p.stackSize} items per stack`;
+function stackText(product) {
+  return `${product.stackSize} items per stack`;
 }
 
 // --------------------------------
@@ -146,15 +157,90 @@ function imageMarkup(name, cat, cls = "") {
 }
 
 // --------------------------------
-// PRODUCTS
+// NAVIGATION
+// --------------------------------
+
+function selectCategory(newCategory) {
+  category = newCategory;
+
+  document.querySelectorAll("[data-category]").forEach(element => {
+    element.classList.toggle(
+      "active",
+      element.dataset.category === category
+    );
+  });
+
+  $("search").value = "";
+
+  renderPage();
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+}
+
+document.querySelectorAll("[data-category]").forEach(element => {
+  element.addEventListener("click", event => {
+    event.preventDefault();
+    selectCategory(element.dataset.category);
+  });
+});
+
+$("search").addEventListener("input", () => {
+  if (category === "All") {
+    selectCategory("Blocks");
+  } else {
+    renderProducts();
+  }
+});
+
+// --------------------------------
+// PAGE DISPLAY
+// --------------------------------
+
+function renderPage() {
+  const isOverview = category === "All";
+
+  $("offers-section").style.display =
+    isOverview ? "block" : "none";
+
+  $("shop-section").style.display =
+    isOverview ? "none" : "block";
+
+  if (isOverview) {
+    $("search").placeholder = "Search the collection...";
+    return;
+  }
+
+  const title = category === "Armor & Weapons"
+    ? "Armor & <em>Weapons.</em>"
+    : category === "Enchantments"
+      ? "Enchantments."
+      : category === "Services"
+        ? "Our <em>Services.</em>"
+        : `${escapeHTML(category)}.`;
+
+  $("category-title").innerHTML = title;
+
+  $("category-description").textContent =
+    categoryDescriptions[category] || "";
+
+  $("search").placeholder = `Search ${category}...`;
+
+  renderProducts();
+}
+
+// --------------------------------
+// LOAD PRODUCTS
 // --------------------------------
 
 async function loadProducts() {
-  $("products").innerHTML =
-    '<p class="muted">Loading products...</p>';
-
   $("offers-grid").innerHTML =
     '<div class="loading-card">Loading featured offers...</div>';
+
+  $("products").innerHTML =
+    '<p class="muted">Loading products...</p>';
 
   const { data, error } = await supabaseClient
     .from("products")
@@ -173,52 +259,53 @@ async function loadProducts() {
   if (error) {
     console.error("Product loading error:", error);
 
-    $("products").innerHTML =
-      '<p class="muted">Could not load products. Please try again later.</p>';
-
     $("offers-grid").innerHTML =
       '<div class="loading-card">Offers are temporarily unavailable.</div>';
+
+    $("products").innerHTML =
+      '<p class="muted">Could not load products. Please try again later.</p>';
 
     return;
   }
 
-  products = (data || []).map(p => ({
-    id: p.id,
-    name: p.name,
-    category: p.category,
-    desc: p.description || "",
-    price: Number(p.price),
-    stackSize: Number(p.stack_size || 64)
+  products = (data || []).map(product => ({
+    id: product.id,
+    name: product.name,
+    category: product.category,
+    desc: product.description || "",
+    price: Number(product.price),
+    stackSize: Number(product.stack_size || 64)
   }));
 
   renderOffers();
-  renderProducts();
+  renderPage();
   renderCart();
 }
 
 // --------------------------------
-// OFFERS
+// FEATURED OFFERS
 // --------------------------------
 
 function renderOffers() {
   const selected = products.slice(0, 3);
 
   $("offers-grid").innerHTML = selected.length
-    ? selected.map(p => `
+    ? selected.map(product => `
       <article class="offer-card">
         <div class="offer-image">
-          ${imageMarkup(p.name, p.category)}
+          ${imageMarkup(product.name, product.category)}
         </div>
 
         <div class="offer-copy">
           <div class="offer-kicker">QUANTITY DEAL</div>
-          <h3>${escapeHTML(p.name)}</h3>
+
+          <h3>${escapeHTML(product.name)}</h3>
 
           <div class="offer-price">
-            ${money(p.price)} <small>/ stack</small>
+            ${money(product.price)} <small>/ stack</small>
           </div>
 
-          <small>${stackText(p)}</small>
+          <small>${stackText(product)}</small>
         </div>
 
         <span class="offer-badge">OFFER</span>
@@ -231,92 +318,87 @@ function renderOffers() {
 // PRODUCT DISPLAY
 // --------------------------------
 
-
 function renderProducts() {
   const q = $("search").value.toLowerCase().trim();
 
-  // Startseite und Kategorien unterschiedlich anzeigen
-  const isHome = category === "All";
-
-  $("offers-section").style.display = isHome ? "" : "none";
-  $("shop-section").style.display = isHome ? "none" : "";
-
-  document.querySelector(".hero").style.display = "none";
-  document.querySelector(".value-strip").style.display = "none";
-  document.querySelector(".trade-note").style.display = "none";
-
-  // Auf der Startseite keine Produktübersicht anzeigen
-  if (isHome) {
-    $("products").innerHTML = "";
-    $("result-count").textContent = "";
-    return;
-  }
-
-  const shown = products.filter(p =>
-    p.category === category &&
-    (p.name + " " + p.category + " " + p.desc)
-      .toLowerCase()
-      .includes(q)
+  const shown = products.filter(product =>
+    product.category === category &&
+    (
+      product.name + " " +
+      product.category + " " +
+      product.desc
+    ).toLowerCase().includes(q)
   );
 
-  $("result-count").textContent = `${shown.length} products`;
+  $("result-count").textContent =
+    `${shown.length} products`;
 
-  let html = shown.map(p => `
+  let html = shown.map(product => `
     <article class="product-card">
+
       <div class="product-visual">
-        <span class="product-tag">${escapeHTML(p.category)}</span>
-        ${imageMarkup(p.name, p.category)}
+        <span class="product-tag">
+          ${escapeHTML(product.category)}
+        </span>
+
+        ${imageMarkup(product.name, product.category)}
       </div>
 
       <div class="product-info">
-        <h3>${escapeHTML(p.name)}</h3>
-        <p>${escapeHTML(p.desc)}</p>
+        <h3>${escapeHTML(product.name)}</h3>
+
+        <p>${escapeHTML(product.desc)}</p>
 
         <div class="price-row">
           <div class="price">
-            ${money(p.price)} <small>/ stack</small>
+            ${money(product.price)}
+            <small>/ stack</small>
           </div>
 
           <button
             class="add-button"
-            data-add="${escapeHTML(p.id)}"
-            aria-label="Add one stack of ${escapeHTML(p.name)} to cart"
+            data-add="${escapeHTML(product.id)}"
+            aria-label="Add ${escapeHTML(product.name)} to cart"
           >+</button>
         </div>
 
-        <small class="stack-info">${stackText(p)}</small>
+        <small class="stack-info">
+          ${stackText(product)}
+        </small>
 
         <div class="discount-note">
           ↘ Quantity discounts: up to 15%
         </div>
       </div>
+
     </article>
   `).join("");
 
-  // Das Formular gibt es ausschließlich im Services-Reiter
   if (category === "Services") {
     html += serviceFormMarkup();
   }
 
-  $("products").innerHTML =
-    html || (category === "Services"
-      ? ""
-      : '<p class="muted">No products available in this category yet.</p>');
+  if (!html && category !== "Services") {
+    html = '<p class="muted">No products available in this category yet.</p>';
+  }
 
-  document.querySelectorAll("[data-add]").forEach(b =>
-    b.addEventListener("click", () => addToCart(b.dataset.add))
-  );
+  $("products").innerHTML = html;
 
-  const serviceForm = $("service-form");
+  document.querySelectorAll("[data-add]").forEach(button => {
+    button.addEventListener("click", () => {
+      addToCart(button.dataset.add);
+    });
+  });
 
-  if (serviceForm) {
-    serviceForm.addEventListener("submit", handleServiceSubmit);
+  const form = $("service-form");
+
+  if (form) {
+    form.addEventListener("submit", handleServiceSubmit);
   }
 }
 
-
 // --------------------------------
-// SERVICE REQUEST FORM
+// SERVICE FORM
 // --------------------------------
 
 function serviceFormMarkup() {
@@ -324,18 +406,23 @@ function serviceFormMarkup() {
     <section class="service-request-card">
 
       <div class="service-request-header">
-        <div class="eyebrow orange">MADE FOR YOUR PROJECT</div>
-        <h3>Request a <em>custom service.</em></h3>
+        <div class="eyebrow orange">
+          MADE FOR YOUR PROJECT
+        </div>
+
+        <h2>Request a <em>custom service.</em></h2>
+
         <p>
-          Need something special? Describe your idea and
-          make your own price proposal.
+          Need something special? Describe your idea,
+          add reference images and suggest your own price.
         </p>
       </div>
 
       <form id="service-form">
 
-        <label class="service-label">
-          Service title
+        <div class="service-field">
+          <label for="service-title">Service title</label>
+
           <input
             id="service-title"
             type="text"
@@ -343,43 +430,60 @@ function serviceFormMarkup() {
             placeholder="e.g. Custom medieval castle"
             required
           >
-        </label>
+        </div>
 
-        <label class="service-label">
-          Description
+        <div class="service-field">
+          <label for="service-description">Description</label>
+
           <textarea
             id="service-description"
-            rows="5"
+            rows="6"
             maxlength="3000"
             placeholder="Describe exactly what you need..."
             required
           ></textarea>
-        </label>
+        </div>
 
-        <label class="service-label">
-          Reference link <span>(optional)</span>
+        <div class="service-field">
+          <label for="service-link">
+            Reference link <span>Optional</span>
+          </label>
+
           <input
             id="service-link"
             type="url"
             maxlength="500"
             placeholder="https://..."
           >
-        </label>
+        </div>
 
-        <label class="service-label">
-          Images <span>(optional, max. 5 images, 5 MB each)</span>
+        <div class="service-field">
+          <label for="service-images">
+            Reference images <span>Optional · Maximum 5 images</span>
+          </label>
+
           <input
             id="service-images"
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif"
             multiple
           >
-        </label>
 
-        <div id="service-image-preview" class="service-image-preview"></div>
+          <div class="field-help">
+            PNG, JPG, WEBP or GIF · Maximum 5 MB per image
+          </div>
+        </div>
 
-        <label class="service-label">
-          Your proposed price (KB$)
+        <div
+          id="service-image-preview"
+          class="service-image-preview"
+        ></div>
+
+        <div class="service-field">
+          <label for="service-price">
+            Your proposed price <span>KB$</span>
+          </label>
+
           <input
             id="service-price"
             type="number"
@@ -389,18 +493,18 @@ function serviceFormMarkup() {
             placeholder="e.g. 150"
             required
           >
-        </label>
+        </div>
 
-        <p class="service-disclaimer">
+        <div class="service-disclaimer">
           Your proposed price will be reviewed by Brat Ltd.
           before the service is accepted.
-        </p>
+        </div>
 
-        <button type="submit" class="checkout">
+        <button type="submit" class="service-submit">
           Add service request to cart <span>→</span>
         </button>
 
-        <p id="service-status" class="small muted"></p>
+        <p id="service-status" class="service-status"></p>
 
       </form>
     </section>
@@ -412,15 +516,19 @@ document.addEventListener("change", event => {
   if (event.target.id !== "service-images") return;
 
   const preview = $("service-image-preview");
+  const status = $("service-status");
   const files = Array.from(event.target.files || []);
 
   if (!preview) return;
 
   preview.innerHTML = "";
 
+  if (status) status.textContent = "";
+
   if (files.length > 5) {
-    $("service-status").textContent =
-      "Please select a maximum of 5 images.";
+    if (status) {
+      status.textContent = "Please select a maximum of 5 images.";
+    }
 
     event.target.value = "";
     return;
@@ -429,23 +537,40 @@ document.addEventListener("change", event => {
   files.forEach(file => {
     if (!file.type.startsWith("image/")) return;
 
+    const wrapper = document.createElement("div");
+    wrapper.className = "preview-image";
+
     const img = document.createElement("img");
     img.alt = file.name;
     img.src = URL.createObjectURL(file);
 
-    preview.appendChild(img);
+    const label = document.createElement("span");
+    label.textContent = file.name;
+
+    wrapper.appendChild(img);
+    wrapper.appendChild(label);
+    preview.appendChild(wrapper);
   });
 });
 
-// Upload images to Supabase Storage
+// --------------------------------
+// UPLOAD SERVICE IMAGES
+// --------------------------------
+
 async function uploadServiceImages(files) {
   const urls = [];
 
   for (const file of files) {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const safeName = file.name.replace(
+      /[^a-zA-Z0-9._-]/g,
+      "_"
+    );
 
-    const filePath =
-      `${Date.now()}-${crypto.randomUUID()}-${safeName}`;
+    const uniqueId = window.crypto?.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    const filePath = `${uniqueId}-${safeName}`;
 
     const { error } = await supabaseClient.storage
       .from("service-attachments")
@@ -470,11 +595,16 @@ async function uploadServiceImages(files) {
   return urls;
 }
 
-// Create service request
+// --------------------------------
+// ADD SERVICE TO CART
+// --------------------------------
+
 async function handleServiceSubmit(event) {
   event.preventDefault();
 
   const status = $("service-status");
+  const button = event.submitter;
+
   const title = $("service-title").value.trim();
   const description = $("service-description").value.trim();
   const link = $("service-link").value.trim();
@@ -482,7 +612,8 @@ async function handleServiceSubmit(event) {
   const files = Array.from($("service-images").files || []);
 
   if (!title || !description) {
-    status.textContent = "Please complete the title and description.";
+    status.textContent =
+      "Please complete the title and description.";
     return;
   }
 
@@ -492,7 +623,8 @@ async function handleServiceSubmit(event) {
   }
 
   if (files.length > 5) {
-    status.textContent = "You can upload a maximum of 5 images.";
+    status.textContent =
+      "You can upload a maximum of 5 images.";
     return;
   }
 
@@ -530,18 +662,17 @@ async function handleServiceSubmit(event) {
     }
   }
 
-  const submitButton = event.submitter;
+  button.disabled = true;
+  button.textContent = "Uploading images...";
 
-  submitButton.disabled = true;
-  submitButton.textContent = "Uploading images...";
-
-  status.textContent = "Please wait while your images are uploaded.";
+  status.textContent =
+    "Please wait while your images are uploaded.";
 
   try {
     const imageUrls = await uploadServiceImages(files);
 
-    const serviceId =
-      `service_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const serviceId = `service_${Date.now()}_${Math.random()
+      .toString(36).slice(2, 8)}`;
 
     cart[serviceId] = {
       type: "service",
@@ -556,10 +687,11 @@ async function handleServiceSubmit(event) {
     renderCart();
     openCart();
 
-    status.textContent = "Service request added to your cart.";
-
     $("service-form").reset();
     $("service-image-preview").innerHTML = "";
+
+    status.textContent =
+      "Service request added to your cart.";
 
   } catch (error) {
     console.error("Service upload error:", error);
@@ -568,14 +700,14 @@ async function handleServiceSubmit(event) {
       error.message || "Something went wrong. Please try again.";
 
   } finally {
-    submitButton.disabled = false;
-    submitButton.innerHTML =
+    button.disabled = false;
+    button.innerHTML =
       'Add service request to cart <span>→</span>';
   }
 }
 
 // --------------------------------
-// CART
+// CART STORAGE AND ENTRIES
 // --------------------------------
 
 function saveCart() {
@@ -583,33 +715,50 @@ function saveCart() {
 }
 
 function getCartEntries() {
-  return Object.entries(cart).filter(([id, item]) => {
-    if (item && typeof item === "object" && item.type === "service") {
-      return Number(item.price) > 0;
-    }
+  return Object.entries(cart)
+    .filter(([id, item]) => {
+      if (
+        item &&
+        typeof item === "object" &&
+        item.type === "service"
+      ) {
+        return Number(item.price) > 0;
+      }
 
-    return products.some(p => String(p.id) === String(id)) &&
-      Number(item) > 0;
-  }).map(([id, item]) => {
-    if (item && typeof item === "object" && item.type === "service") {
+      return products.some(product =>
+        String(product.id) === String(id)
+      ) && Number(item) > 0;
+    })
+    .map(([id, item]) => {
+      if (
+        item &&
+        typeof item === "object" &&
+        item.type === "service"
+      ) {
+        return {
+          id,
+          type: "service",
+          service: item,
+          quantity: 1
+        };
+      }
+
+      const product = products.find(p =>
+        String(p.id) === String(id)
+      );
+
       return {
         id,
-        type: "service",
-        service: item,
-        quantity: 1
+        type: "product",
+        product,
+        quantity: Number(item)
       };
-    }
-
-    const product = products.find(p => String(p.id) === String(id));
-
-    return {
-      id,
-      type: "product",
-      product,
-      quantity: Number(item)
-    };
-  });
+    });
 }
+
+// --------------------------------
+// PRODUCT CART ACTIONS
+// --------------------------------
 
 function addToCart(id) {
   cart[id] = (Number(cart[id]) || 0) + 1;
@@ -637,12 +786,15 @@ function removeService(id) {
   renderCart();
 }
 
+// --------------------------------
+// CART TOTALS
+// --------------------------------
+
 function getCartTotals() {
   const entries = getCartEntries();
 
   let total = 0;
   let originalTotal = 0;
-  let savings = 0;
 
   entries.forEach(entry => {
     if (entry.type === "service") {
@@ -651,18 +803,17 @@ function getCartTotals() {
       return;
     }
 
-    const p = entry.product;
+    const product = entry.product;
     const quantity = entry.quantity;
 
-    const discountedPrice = unitPrice(p, quantity);
-
-    total += discountedPrice * quantity;
-    originalTotal += Number(p.price) * quantity;
+    total += unitPrice(product, quantity) * quantity;
+    originalTotal += Number(product.price) * quantity;
   });
 
   total = roundMoney(total);
   originalTotal = roundMoney(originalTotal);
-  savings = roundMoney(originalTotal - total);
+
+  const savings = roundMoney(originalTotal - total);
 
   return {
     entries,
@@ -673,39 +824,50 @@ function getCartTotals() {
   };
 }
 
+// --------------------------------
+// RENDER CART
+// --------------------------------
+
 function renderCart() {
   const entries = getCartEntries();
 
   let totalStacks = 0;
+  let serviceCount = 0;
 
   $("cart-items").innerHTML = entries.length
     ? entries.map(entry => {
         if (entry.type === "service") {
-          const s = entry.service;
+          const service = entry.service;
+          serviceCount++;
 
           return `
             <div class="cart-line service-cart-line">
               <div>
-                <strong>${escapeHTML(s.title)}</strong>
+                <strong>${escapeHTML(service.title)}</strong>
 
                 <small>CUSTOM SERVICE REQUEST</small>
 
                 <small>
-                  ${money(s.price)} · Proposed price
+                  ${money(service.price)} · Proposed price
                 </small>
 
                 <small>
-                  ${escapeHTML(s.description)}
+                  ${escapeHTML(service.description)}
                 </small>
 
-                ${s.link ? `
+                ${service.link ? `
                   <small>
-                    Reference: ${escapeHTML(s.link)}
+                    Reference:
+                    <a
+                      href="${escapeHTML(service.link)}"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >Open link</a>
                   </small>
                 ` : ""}
 
                 <small>
-                  ${s.imageUrls.length} attached image(s)
+                  ${service.imageUrls.length} attached image(s)
                 </small>
 
                 <small class="cart-discount">
@@ -723,24 +885,26 @@ function renderCart() {
           `;
         }
 
-        const p = entry.product;
+        const product = entry.product;
         const quantity = entry.quantity;
 
         const discount = getDiscountPercent(quantity);
-        const price = unitPrice(p, quantity);
+        const price = unitPrice(product, quantity);
 
         const sum = roundMoney(price * quantity);
-        const originalSum = roundMoney(Number(p.price) * quantity);
+        const originalSum = roundMoney(
+          Number(product.price) * quantity
+        );
         const saved = roundMoney(originalSum - sum);
 
-        const itemCount = quantity * p.stackSize;
+        const itemCount = quantity * product.stackSize;
 
         totalStacks += quantity;
 
         return `
           <div class="cart-line">
             <div>
-              <strong>${escapeHTML(p.name)}</strong>
+              <strong>${escapeHTML(product.name)}</strong>
 
               <small>
                 ${money(price)} per stack · ${money(sum)} total
@@ -783,27 +947,25 @@ function renderCart() {
 
   const totals = getCartTotals();
 
-  $("cart-count").textContent = totalStacks + totals.entries.filter(e => e.type === "service").length;
+  $("cart-count").textContent =
+    totalStacks + serviceCount;
+
   $("cart-total").textContent = money(totals.total);
 
-  if ($("cart-savings")) {
-    $("cart-savings").textContent = money(totals.savings);
-  }
-
-  document.querySelectorAll("[data-change]").forEach(b =>
-    b.addEventListener("click", () =>
+  document.querySelectorAll("[data-change]").forEach(button => {
+    button.addEventListener("click", () => {
       changeQty(
-        b.dataset.change,
-        Number(b.dataset.delta)
-      )
-    )
-  );
+        button.dataset.change,
+        Number(button.dataset.delta)
+      );
+    });
+  });
 
-  document.querySelectorAll("[data-remove-service]").forEach(b =>
-    b.addEventListener("click", () =>
-      removeService(b.dataset.removeService)
-    )
-  );
+  document.querySelectorAll("[data-remove-service]").forEach(button => {
+    button.addEventListener("click", () => {
+      removeService(button.dataset.removeService);
+    });
+  });
 }
 
 // --------------------------------
@@ -820,43 +982,9 @@ function closeCart() {
   $("overlay").classList.remove("show");
 }
 
-// --------------------------------
-// CATEGORY NAVIGATION
-// --------------------------------
-
-function selectCategory(c) {
-  category = c;
-
-  document.querySelectorAll("[data-category]").forEach(e =>
-    e.classList.toggle("active", e.dataset.category === category)
-  );
-
-  renderProducts();
-}
-
-document.querySelectorAll("[data-category]").forEach(e =>
-  e.addEventListener("click", () => {
-    selectCategory(e.dataset.category);
-
-    if (
-      e.classList.contains("nav-link") ||
-      e.classList.contains("text-link")
-    ) {
-      document.querySelector("#shop").scrollIntoView({
-        behavior: "smooth"
-      });
-    }
-  })
-);
-
-// --------------------------------
-// SEARCH AND BUTTONS
-// --------------------------------
-
-$("search").addEventListener("input", renderProducts);
-$("open-cart").onclick = openCart;
-$("close-cart").onclick = closeCart;
-$("overlay").onclick = closeCart;
+$("open-cart").addEventListener("click", openCart);
+$("close-cart").addEventListener("click", closeCart);
+$("overlay").addEventListener("click", closeCart);
 
 // --------------------------------
 // CHECKOUT
@@ -874,32 +1002,13 @@ function showCheckoutTotal() {
   if (!entries.length) {
     $("order-status").textContent =
       "Add some products to your cart first.";
-
     return;
   }
 
-  let preview = $("checkout-total-preview");
+  const serviceCount =
+    entries.filter(entry => entry.type === "service").length;
 
-  if (!preview) {
-    preview = document.createElement("div");
-    preview.id = "checkout-total-preview";
-
-    const modal = $("order-modal");
-    const firstInput = $("player-name");
-
-    if (firstInput && firstInput.parentElement) {
-      firstInput.parentElement.insertBefore(
-        preview,
-        firstInput
-      );
-    } else {
-      modal.prepend(preview);
-    }
-  }
-
-  const serviceCount = entries.filter(e => e.type === "service").length;
-
-  preview.innerHTML = `
+  $("checkout-total-preview").innerHTML = `
     <div class="checkout-summary">
 
       <div>
@@ -936,23 +1045,22 @@ function showCheckoutTotal() {
   $("order-modal").classList.add("show");
 }
 
-$("checkout").onclick = showCheckoutTotal;
+$("checkout").addEventListener("click", showCheckoutTotal);
 
-$("close-modal").onclick = () => {
+$("close-modal").addEventListener("click", () => {
   $("order-modal").classList.remove("show");
-};
+});
 
 // --------------------------------
 // CREATE ORDER FILE
 // --------------------------------
 
-$("send-order").onclick = () => {
+$("send-order").addEventListener("click", () => {
   const name = $("player-name").value.trim();
 
   if (!name) {
     $("order-status").textContent =
       "Please enter your Minecraft username.";
-
     return;
   }
 
@@ -965,50 +1073,50 @@ $("send-order").onclick = () => {
   } = getCartTotals();
 
   if (!entries.length) {
-    $("order-status").textContent =
-      "Your cart is empty.";
-
+    $("order-status").textContent = "Your cart is empty.";
     return;
   }
 
   const lines = entries.map(entry => {
     if (entry.type === "service") {
-      const s = entry.service;
+      const service = entry.service;
 
       return `
 CUSTOM SERVICE REQUEST
-Title: ${s.title}
+Title: ${service.title}
 
 Description:
-${s.description}
+${service.description}
 
-Proposed price: ${money(s.price)}
+Proposed price: ${money(service.price)}
 Approval: Pending review by Brat Ltd.
 
 Reference link:
-${s.link || "None"}
+${service.link || "None"}
 
 Images:
-${s.imageUrls.length
-  ? s.imageUrls.join("\n")
+${service.imageUrls.length
+  ? service.imageUrls.join("\n")
   : "None"}
       `.trim();
     }
 
-    const p = entry.product;
+    const product = entry.product;
     const quantity = entry.quantity;
 
     const discount = getDiscountPercent(quantity);
-    const price = unitPrice(p, quantity);
+    const price = unitPrice(product, quantity);
 
     const sum = roundMoney(price * quantity);
-    const originalSum = roundMoney(Number(p.price) * quantity);
+    const originalSum = roundMoney(
+      Number(product.price) * quantity
+    );
     const saved = roundMoney(originalSum - sum);
 
-    const itemCount = quantity * p.stackSize;
+    const itemCount = quantity * product.stackSize;
 
     return `
-${p.name}
+${product.name}
 ${quantity} stacks (${itemCount} items)
 Price: ${money(sum)}
 Discount: ${discount}%
@@ -1038,18 +1146,19 @@ Custom service prices are proposed prices and require approval by Brat Ltd.`;
   });
 
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
+  const link = document.createElement("a");
 
-  a.href = url;
-  a.download = `Brat-Ltd-Order-${name.replace(/[^a-z0-9_-]/gi, "_")}.txt`;
+  link.href = url;
+  link.download =
+    `Brat-Ltd-Order-${name.replace(/[^a-z0-9_-]/gi, "_")}.txt`;
 
-  a.click();
+  link.click();
 
   URL.revokeObjectURL(url);
 
   $("order-status").textContent =
     "Order request created as a text file. It has not been submitted automatically.";
-};
+});
 
 // --------------------------------
 // START
