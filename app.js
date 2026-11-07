@@ -69,7 +69,7 @@ function unitPrice(p, stackCount) {
     }
   }
 
-  return Math.ceil(price * 10) / 10;
+  return Math.round(price * 10) / 10;
 }
 
 function isOffer(p) {
