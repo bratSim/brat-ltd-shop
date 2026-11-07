@@ -42,9 +42,15 @@
       >
     </label>
 
-    <button class="cart-button" id="open-cart">
-      Cart <span class="cart-count" id="cart-count">0</span>
-    </button>
+    <div class="topbar-actions">
+      <button class="admin-login-button" id="admin-login-open">
+        Admin Login
+      </button>
+
+      <button class="cart-button" id="open-cart">
+        Cart <span class="cart-count" id="cart-count">0</span>
+      </button>
+    </div>
   </header>
 
   <nav class="nav" aria-label="Product categories">
@@ -54,12 +60,22 @@
     <a href="#" data-category="Armor & Weapons" class="nav-link">Armor &amp; Weapons</a>
     <a href="#" data-category="Enchantments" class="nav-link">Enchantments</a>
     <a href="#" data-category="Services" class="nav-link">Services</a>
+
+    <a
+      href="#"
+      id="requests-nav-link"
+      class="nav-link admin-only"
+      data-category="Requests"
+      style="display:none"
+    >
+      Requests
+    </a>
   </nav>
 
   <main>
 
-    <!-- OVERVIEW: OFFERS ONLY -->
-    <section class="offers-section" id="offers-section">
+    <!-- OVERVIEW -->
+    <section class="offers-section" id="offers">
       <div class="section-top">
         <div>
           <div class="eyebrow orange">HAND-PICKED FOR YOU</div>
@@ -76,7 +92,7 @@
     </section>
 
     <!-- CATEGORY PAGES -->
-    <section class="shop-section" id="shop-section" style="display:none">
+    <section class="shop-section" id="shop" style="display:none">
 
       <div class="section-top shop-heading">
         <div>
@@ -94,6 +110,38 @@
         <p class="muted">Loading products...</p>
       </div>
 
+    </section>
+
+    <!-- PRIVATE ADMIN REQUESTS -->
+    <section
+      class="shop-section admin-only"
+      id="requests-section"
+      style="display:none"
+    >
+      <div class="section-top shop-heading">
+        <div>
+          <div class="eyebrow orange">BRAT LTD. ADMINISTRATION</div>
+          <h1>Customer <em>requests.</em></h1>
+          <p class="section-subtitle">
+            Manage incoming orders and custom service requests.
+          </p>
+        </div>
+
+        <button class="admin-logout-button" id="admin-logout">
+          Log out
+        </button>
+      </div>
+
+      <div class="requests-toolbar">
+        <span id="requests-count">Loading requests...</span>
+        <button class="checkout" id="refresh-requests">
+          Refresh requests ↻
+        </button>
+      </div>
+
+      <div id="requests-list" class="requests-list">
+        <p class="muted">Loading requests...</p>
+      </div>
     </section>
 
   </main>
@@ -181,13 +229,64 @@
       </label>
 
       <button class="checkout" id="send-order">
-        Create order request <span>→</span>
+        Submit order request <span>→</span>
       </button>
 
       <p class="small muted" id="order-status"></p>
 
     </div>
 
+  </div>
+
+  <!-- ADMIN LOGIN MODAL -->
+  <div class="modal-backdrop" id="admin-login-modal">
+    <div class="modal">
+
+      <button
+        class="icon-button modal-close"
+        id="admin-login-close"
+        aria-label="Close"
+      >×</button>
+
+      <div class="eyebrow orange">RESTRICTED ACCESS</div>
+      <h2>Admin <em>login.</em></h2>
+
+      <p class="muted">
+        Sign in with your Brat Ltd. administrator account.
+      </p>
+
+      <form id="admin-login-form">
+
+        <label>
+          Email address
+          <input
+            id="admin-email"
+            type="email"
+            autocomplete="username"
+            placeholder="Your email address"
+            required
+          >
+        </label>
+
+        <label>
+          Password
+          <input
+            id="admin-password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Your password"
+            required
+          >
+        </label>
+
+        <button class="checkout" type="submit" id="admin-login-submit">
+          Sign in <span>→</span>
+        </button>
+
+        <p class="small muted" id="admin-login-status"></p>
+
+      </form>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
