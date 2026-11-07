@@ -241,7 +241,7 @@ function renderProducts() {
   $("offers-section").style.display = isHome ? "" : "none";
   $("shop-section").style.display = isHome ? "none" : "";
 
-  document.querySelector(".hero").style.display = isHome ? "none" : "none";
+  document.querySelector(".hero").style.display = "none";
   document.querySelector(".value-strip").style.display = "none";
   document.querySelector(".trade-note").style.display = "none";
 
