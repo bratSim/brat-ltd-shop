@@ -1102,3 +1102,141 @@ footer {
     height: 155px;
   }
 }
+/* Overview and category layout */
+.category-tabs {
+  display: none;
+}
+
+/* Custom service form */
+.service-request-card {
+  grid-column: 1 / -1;
+  width: 100%;
+  max-width: 850px;
+  margin: 12px auto 30px;
+  padding: 32px;
+  background: linear-gradient(145deg, #211b16, #171412);
+  border: 1px solid #59402b;
+}
+
+.service-request-header {
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.service-request-header h3 {
+  font: 800 27px Manrope, sans-serif;
+  margin: 10px 0;
+}
+
+.service-request-header h3 em {
+  color: var(--orange2);
+  font-style: normal;
+}
+
+.service-request-header p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+#service-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.service-label {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  color: #e9dfd3;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.service-label span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+#service-form input,
+#service-form textarea {
+  width: 100%;
+  margin: 0;
+  padding: 13px;
+  background: #11100f;
+  border: 1px solid #493b2e;
+  color: var(--text);
+  font: 12px 'DM Sans', sans-serif;
+}
+
+#service-form textarea {
+  min-height: 145px;
+  resize: vertical;
+}
+
+#service-form input:focus,
+#service-form textarea:focus {
+  outline: 1px solid var(--orange);
+}
+
+#service-description,
+#service-images,
+#service-image-preview,
+.service-disclaimer,
+#service-form .checkout,
+#service-status {
+  grid-column: 1 / -1;
+}
+
+#service-images {
+  height: auto;
+}
+
+#service-image-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+#service-image-preview img {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border: 1px solid #634326;
+}
+
+.service-disclaimer {
+  margin: 0;
+  padding: 13px 15px;
+  background: #2b2118;
+  border-left: 2px solid var(--orange);
+  color: #b9a58c;
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.service-cart-line {
+  border-left: 2px solid var(--orange);
+  padding-left: 12px;
+}
+
+@media(max-width:650px) {
+  .service-request-card {
+    padding: 20px;
+  }
+
+  #service-form {
+    grid-template-columns: 1fr;
+  }
+
+  #service-description,
+  #service-images,
+  #service-image-preview,
+  .service-disclaimer,
+  #service-form .checkout,
+  #service-status {
+    grid-column: 1;
+  }
+}
