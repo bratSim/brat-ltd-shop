@@ -28,15 +28,20 @@ const escapeHTML = value =>
     "'": "&#039;"
   })[char]);
 
-// Always round final amounts up to whole KB$
+// Round ONLY the final total upwards
 const roundMoney = value =>
   Math.ceil(Number(value || 0));
 
+// Display normal prices without rounding
 const money = value =>
-  `${Math.ceil(Number(value || 0))} KB$`;
+  `${Number(value || 0).toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  })} KB$`;
 
+// Final checkout amount: whole KB$
 const checkoutMoney = value =>
-  money(roundMoney(value));
+  `${roundMoney(value).toLocaleString("en-US")} KB$`;
 
 const setText = (id, value) => {
   const element = $(id);
@@ -106,7 +111,13 @@ function getTextureName(name) {
 
 function productImage(product) {
   const texture = getTextureName(product.name);
-  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures/item/${texture}.png`;
+
+  // Blocks use the block texture folder.
+  // All other categories use the item texture folder.
+  const textureType =
+    product.category === "Blocks" ? "block" : "item";
+
+  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures/${textureType}/${texture}.png`;
 }
 
 function imageMarkup(product, className = "product-image") {
@@ -115,6 +126,7 @@ function imageMarkup(product, className = "product-image") {
       class="${className}"
       src="${productImage(product)}"
       alt="${escapeHTML(product.name)}"
+      loading="lazy"
       onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
     >
     <div class="fallback-icon" style="display:none;">▦</div>
@@ -130,7 +142,8 @@ function getManualDiscount(product) {
 }
 
 function getSalePrice(product) {
-  return Number(product.price) * (1 - getManualDiscount(product) / 100);
+  return Number(product.price) *
+    (1 - getManualDiscount(product) / 100);
 }
 
 function getDiscountPercent(quantity) {
@@ -155,7 +168,10 @@ function getCartTotals() {
   let afterQuantity = 0;
 
   for (const [id, quantity] of Object.entries(cart)) {
-    const product = products.find(item => String(item.id) === String(id));
+    const product = products.find(item =>
+      String(item.id) === String(id)
+    );
+
     if (!product || product.isService) continue;
 
     const stacks = Number(quantity);
@@ -166,7 +182,9 @@ function getCartTotals() {
     afterManual += salePrice * stacks;
 
     const quantityDiscount = getDiscountPercent(stacks);
-    afterQuantity += salePrice * stacks * (1 - quantityDiscount / 100);
+
+    afterQuantity +=
+      salePrice * stacks * (1 - quantityDiscount / 100);
   }
 
   const manualSavings = original - afterManual;
@@ -261,6 +279,7 @@ function showCategory(nextCategory) {
   };
 
   setText("category-title", nextCategory);
+
   setText(
     "category-description",
     descriptions[nextCategory] || "Browse available products."
@@ -347,7 +366,9 @@ function renderOffers() {
   }).join("");
 
   container.querySelectorAll("[data-add]").forEach(button => {
-    button.addEventListener("click", () => addToCart(button.dataset.add));
+    button.addEventListener("click", () =>
+      addToCart(button.dataset.add)
+    );
   });
 }
 
@@ -445,7 +466,9 @@ function renderProducts() {
   `).join("");
 
   container.querySelectorAll("[data-add]").forEach(button => {
-    button.addEventListener("click", () => addToCart(button.dataset.add));
+    button.addEventListener("click", () =>
+      addToCart(button.dataset.add)
+    );
   });
 
   attachProductEditorButtons(container);
@@ -492,7 +515,7 @@ function openProductEditor(product) {
           id="edit-product-price"
           type="number"
           min="0"
-          step="1"
+          step="0.01"
           value="${Number(product.price)}"
           required
         >
@@ -519,7 +542,9 @@ function openProductEditor(product) {
 
   document.body.appendChild(modal);
 
-  $("close-product-editor").addEventListener("click", () => modal.remove());
+  $("close-product-editor").addEventListener("click", () =>
+    modal.remove()
+  );
 
   $("product-editor-form").addEventListener("submit", async event => {
     event.preventDefault();
@@ -559,7 +584,10 @@ function saveCart() {
 }
 
 function addToCart(id) {
-  const product = products.find(item => String(item.id) === String(id));
+  const product = products.find(item =>
+    String(item.id) === String(id)
+  );
+
   if (!product) return;
 
   cart[id] = Number(cart[id] || 0) + 1;
@@ -614,7 +642,9 @@ function renderCart() {
   }
 
   container.innerHTML = entries.map(([id, quantity]) => {
-    const product = products.find(item => String(item.id) === String(id));
+    const product = products.find(item =>
+      String(item.id) === String(id)
+    );
 
     if (product.isService) {
       return `
@@ -641,8 +671,11 @@ function renderCart() {
     const stacks = Number(quantity);
     const discount = getDiscountPercent(stacks);
     const manualDiscount = getManualDiscount(product);
+
     const finalPrice =
-      getSalePrice(product) * stacks * (1 - discount / 100);
+      getSalePrice(product) *
+      stacks *
+      (1 - discount / 100);
 
     return `
       <div class="cart-item">
@@ -842,7 +875,9 @@ async function submitOrder() {
   const totals = getCartTotals();
 
   const items = Object.entries(cart).map(([id, quantity]) => {
-    const product = products.find(item => String(item.id) === String(id));
+    const product = products.find(item =>
+      String(item.id) === String(id)
+    );
 
     return {
       id: product.id,
@@ -852,11 +887,10 @@ async function submitOrder() {
       price: Number(product.price),
       discount_percent: getManualDiscount(product),
       quantity_discount_percent: getDiscountPercent(Number(quantity)),
-      final_price: roundMoney(
+      final_price:
         getSalePrice(product) *
         Number(quantity) *
         (1 - getDiscountPercent(Number(quantity)) / 100)
-      )
     };
   });
 
@@ -1416,7 +1450,7 @@ function renderServiceForm() {
           id="service-budget"
           type="number"
           min="0"
-          step="1"
+          step="0.01"
           placeholder="Your budget"
         >
 
@@ -1522,7 +1556,10 @@ const originalSubmitOrder = submitOrder;
 
 submitOrder = async function() {
   const serviceEntry = Object.entries(cart).find(([id]) => {
-    const product = products.find(item => String(item.id) === String(id));
+    const product = products.find(item =>
+      String(item.id) === String(id)
+    );
+
     return product?.isService;
   });
 
