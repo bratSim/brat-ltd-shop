@@ -1890,3 +1890,265 @@ select:focus-visible {
     transition-duration: .01ms !important;
   }
 }
+
+/* =========================================
+   BRAT LTD. — COMPATIBILITY FIXES
+========================================= */
+
+/* MODALS */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, .78);
+  backdrop-filter: blur(7px);
+}
+
+.modal-backdrop.show {
+  display: flex;
+}
+
+.modal-backdrop .modal {
+  width: min(100%, 520px);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* HEADER ACTIONS */
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+#user-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* CART COMPATIBILITY */
+
+.empty-cart,
+.cart-empty {
+  padding: 45px 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.empty-cart .empty-icon,
+.cart-empty-icon {
+  margin-bottom: 10px;
+  font-size: 35px;
+}
+
+.cart-item {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.cart-item-image img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+/* ADMIN STATISTICS */
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 15px;
+  margin: 25px 0;
+}
+
+.admin-stat-card {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.admin-stat-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.admin-stat-card strong {
+  display: block;
+  margin-top: 7px;
+  color: var(--orange);
+  font-family: var(--heading);
+  font-size: 25px;
+}
+
+/* CATALOGUE */
+
+.catalog-admin {
+  margin-top: 60px;
+  padding-top: 35px;
+  border-top: 1px solid var(--border);
+}
+
+.catalog-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.catalog-toolbar input[type="search"] {
+  flex: 1;
+}
+
+.catalog-import-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  cursor: pointer;
+}
+
+.catalog-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.catalog-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.catalog-table th,
+.catalog-table td {
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.catalog-table th {
+  background: var(--surface-light);
+  color: var(--orange);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.catalog-table td {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.catalog-table td strong {
+  color: var(--text);
+}
+
+/* SERVICE REQUEST FORM */
+
+.service-request-card {
+  grid-column: 1 / -1;
+  max-width: 750px;
+  margin: 0 auto;
+  padding: 30px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+}
+
+.service-request-card h2 {
+  margin: 8px 0;
+  font-family: var(--heading);
+  font-size: 27px;
+}
+
+.service-request-card > p {
+  margin-bottom: 20px;
+  color: var(--muted);
+}
+
+/* TOASTS */
+
+#toast-container {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toast {
+  max-width: 350px;
+  padding: 13px 17px;
+  background: var(--surface-light);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--orange);
+  border-radius: 9px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+}
+
+.toast.error {
+  border-left-color: var(--red);
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 850px) {
+  .header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .admin-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .catalog-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 600px) {
+  .topbar {
+    flex-wrap: wrap;
+    padding: 15px;
+  }
+
+  .header-search {
+    order: 3;
+    width: 100%;
+  }
+
+  .header-actions {
+    gap: 6px;
+  }
+
+  .admin-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .catalog-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .service-request-card {
+    padding: 20px;
+  }
+}
