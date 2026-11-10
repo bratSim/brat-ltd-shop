@@ -1,4 +1,3 @@
-
 const supabaseClient = window.supabase.createClient(
   window.SUPABASE_URL,
   window.SUPABASE_KEY
@@ -235,7 +234,6 @@ function getCartTotals() {
     checkoutTotal: roundMoney(afterQuantity)
   };
 }
-
 /* =========================================
    PRODUCT LOADING
 ========================================= */
@@ -480,13 +478,18 @@ function renderProducts() {
       <div class="product-info">
         <div class="product-tag">${escapeHTML(product.category)}</div>
         <h3>${escapeHTML(product.name)}</h3>
-        <p class="product-description">${escapeHTML(product.description || "")}</p>
+
+        <p class="product-description">
+          ${escapeHTML(product.description || "")}
+        </p>
 
         <div class="price-row">
           ${productPriceMarkup(product)}
         </div>
 
-        <div class="stack-info">${stackText(product)}</div>
+        <div class="stack-info">
+          ${stackText(product)}
+        </div>
 
         <button
           class="primary-button add-button"
@@ -505,8 +508,26 @@ function renderProducts() {
     );
   });
 
-  attachProductEditorButtons(container);
+  container.querySelectorAll("[data-edit-product]").forEach(button => {
+    button.addEventListener("click", () =>
+      openProductEditor(button.dataset.editProduct)
+    );
+  });
 }
+
+/* =========================================
+   SEARCH
+========================================= */
+
+if ($("search")) {
+  $("search").addEventListener("input", () => {
+    renderOffers();
+    renderProducts();
+  });
+}
+/* =========================================
+   PRODUCT EDITOR BUTTONS
+========================================= */
 
 function attachProductEditorButtons(container = document) {
   container.querySelectorAll("[data-edit-product]").forEach(button => {
@@ -537,6 +558,7 @@ function openProductEditor(product) {
   modal.innerHTML = `
     <div class="modal product-editor-modal">
       <button class="modal-close" id="close-product-editor" type="button">×</button>
+
       <div class="modal-eyebrow">PRODUCT MANAGEMENT</div>
       <h2>Edit <span class="orange">product.</span></h2>
 
@@ -544,13 +566,31 @@ function openProductEditor(product) {
         <label>Product name</label>
         <input value="${escapeHTML(product.name)}" disabled>
 
-        <label>Price per stack (64 items)</label>
+        <label>Category</label>
+        <select id="edit-product-category">
+          ${["Blocks", "Items", "Armor & Weapons", "Enchantments", "Services"].map(c =>
+            `<option value="${c}" ${product.category === c ? "selected" : ""}>${c}</option>`
+          ).join("")}
+        </select>
+
+        <label>Price per stack (${Number(product.stack_size || 64)} items)</label>
         <input
           id="edit-product-price"
           type="number"
           min="0"
           step="0.01"
-          value="${Number(product.price)}"
+          value="${Number(product.price || 0)}"
+          required
+        >
+
+        <label>Stack size (1–64)</label>
+        <input
+          id="edit-product-stack"
+          type="number"
+          min="1"
+          max="64"
+          step="1"
+          value="${Number(product.stack_size || 64)}"
           required
         >
 
@@ -565,6 +605,15 @@ function openProductEditor(product) {
           required
         >
 
+        <label class="catalog-active-toggle">
+          <input
+            id="edit-product-active"
+            type="checkbox"
+            ${product.is_active ? "checked" : ""}
+          >
+          Active in public shop
+        </label>
+
         <button class="primary-button full-width" type="submit">
           Save changes
         </button>
@@ -576,17 +625,24 @@ function openProductEditor(product) {
 
   document.body.appendChild(modal);
 
-  $("close-product-editor").addEventListener("click", () =>
-    modal.remove()
-  );
+  $("close-product-editor").addEventListener("click", () => modal.remove());
 
   $("product-editor-form").addEventListener("submit", async event => {
     event.preventDefault();
 
     const price = Number($("edit-product-price").value);
     const discount = Number($("edit-product-discount").value);
+    const stackSize = Number($("edit-product-stack").value);
 
-    if (price < 0 || discount < 0 || discount > 90) {
+    if (
+      !Number.isFinite(price) ||
+      price < 0 ||
+      discount < 0 ||
+      discount > 90 ||
+      !Number.isInteger(stackSize) ||
+      stackSize < 1 ||
+      stackSize > 64
+    ) {
       setText("product-editor-message", "Please enter valid values.");
       return;
     }
@@ -595,7 +651,10 @@ function openProductEditor(product) {
       .from("products")
       .update({
         price,
-        discount_percent: discount
+        discount_percent: discount,
+        stack_size: stackSize,
+        category: $("edit-product-category").value,
+        is_active: $("edit-product-active").checked
       })
       .eq("id", editingProductId);
 
@@ -606,6 +665,7 @@ function openProductEditor(product) {
 
     modal.remove();
     await loadProducts();
+    await loadCatalogProducts();
   });
 }
 
@@ -814,738 +874,312 @@ function renderCart() {
     </div>
   `;
 }
+/* =========================================
+   CART OPEN / CLOSE
+========================================= */
 
 function openCart() {
-  $("cart-panel")?.classList.add("open");
-  $("overlay")?.classList.add("show");
+  const panel = $("cart-panel");
+  const overlay = $("cart-overlay");
+
+  if (panel) panel.classList.add("active");
+  if (overlay) overlay.classList.add("active");
+
+  document.body.style.overflow = "hidden";
 }
 
 function closeCart() {
-  $("cart-panel")?.classList.remove("open");
-  $("overlay")?.classList.remove("show");
+  const panel = $("cart-panel");
+  const overlay = $("cart-overlay");
+
+  if (panel) panel.classList.remove("active");
+  if (overlay) overlay.classList.remove("active");
+
+  document.body.style.overflow = "";
 }
 
-$("open-cart")?.addEventListener("click", openCart);
-$("close-cart")?.addEventListener("click", closeCart);
-$("overlay")?.addEventListener("click", closeCart);
+if ($("cart-button")) {
+  $("cart-button").addEventListener("click", openCart);
+}
+
+if ($("cart-close")) {
+  $("cart-close").addEventListener("click", closeCart);
+}
+
+if ($("cart-overlay")) {
+  $("cart-overlay").addEventListener("click", closeCart);
+}
 
 /* =========================================
-   CHECKOUT
+   CHECKOUT MODAL
 ========================================= */
 
-function showCheckoutTotal() {
+function openCheckout() {
   const entries = Object.entries(cart).filter(([id, quantity]) =>
     Number(quantity) > 0 &&
-    products.some(item => String(item.id) === String(id))
-  );
-
-  if (!entries.length) return;
-
-  const totals = getCartTotals();
-
-  $("checkout-total-preview").innerHTML = `
-    <div class="total-line">
-      <span>Subtotal</span>
-      <span>${money(totals.original)}</span>
-    </div>
-
-    ${totals.manualSavings > 0 ? `
-      <div class="total-line discount-line">
-        <span>Product discounts</span>
-        <span>-${money(totals.manualSavings)}</span>
-      </div>
-    ` : ""}
-
-    ${totals.quantitySavings > 0 ? `
-      <div class="total-line discount-line">
-        <span>Quantity discounts</span>
-        <span>-${money(totals.quantitySavings)}</span>
-      </div>
-    ` : ""}
-
-    ${totals.serviceTotal > 0 ? `
-      <div class="total-line">
-        <span>Service budgets</span>
-        <span>${money(totals.serviceTotal)}</span>
-      </div>
-    ` : ""}
-
-    <div class="total-line grand-total">
-      <span>Final total</span>
-      <strong>${checkoutMoney(totals.total)}</strong>
-    </div>
-  `;
-
-  const dateInput = $("due-date");
-
-  if (dateInput) {
-    const today = new Date();
-
-    const localDate = new Date(
-      today.getTime() - today.getTimezoneOffset() * 60000
-    ).toISOString().slice(0, 10);
-
-    dateInput.min = localDate;
-  }
-
-  setText("checkout-message", "");
-
-  closeCart();
-  $("order-modal")?.classList.add("show");
-}
-
-$("checkout")?.addEventListener("click", showCheckoutTotal);
-
-document.querySelectorAll("[data-close]").forEach(button => {
-  button.addEventListener("click", () => {
-    $(button.dataset.close)?.classList.remove("show");
-  });
-});
-
-$("checkout-form")?.addEventListener("submit", event => {
-  event.preventDefault();
-  submitOrder();
-});
-
-async function submitOrder() {
-  const name = $("player-name")?.value.trim();
-  const note = $("order-note")?.value.trim();
-  const dueDate = $("due-date")?.value;
-  const district = $("delivery-district")?.value;
-  const address = $("delivery-address")?.value.trim();
-
-  if (!name || !dueDate || !district || !address) {
-    setText("checkout-message", "Please complete all required fields.");
-    return;
-  }
-
-  const today = new Date();
-
-  const todayString = new Date(
-    today.getTime() - today.getTimezoneOffset() * 60000
-  ).toISOString().slice(0, 10);
-
-  if (dueDate < todayString) {
-    setText("checkout-message", "Please select a future date.");
-    return;
-  }
-
-  if (address.length < 2) {
-    setText("checkout-message", "Please enter a valid delivery address.");
-    return;
-  }
-
-  const entries = Object.entries(cart).filter(([id, quantity]) =>
-    Number(quantity) > 0 &&
-    products.some(item => String(item.id) === String(id))
+    products.some(product => String(product.id) === String(id))
   );
 
   if (!entries.length) {
-    setText("checkout-message", "Your cart is empty.");
+    showToast("Your cart is empty.", "error");
+    return;
+  }
+
+  const modal = $("checkout-modal");
+
+  if (!modal) {
+    showToast("Checkout is currently unavailable.", "error");
     return;
   }
 
   const totals = getCartTotals();
 
-  const cartProducts = entries.map(([id, quantity]) =>
-    products.find(item => String(item.id) === String(id))
-  );
+  if ($("checkout-summary")) {
+    $("checkout-summary").innerHTML = `
+      <div class="checkout-summary-row">
+        <span>Items in cart</span>
+        <strong>${entries.length}</strong>
+      </div>
 
-  const hasServices = cartProducts.some(product => product.isService);
+      <div class="checkout-summary-row">
+        <span>Subtotal</span>
+        <strong>${money(totals.original)}</strong>
+      </div>
 
-  /*
-    Every cart entry is now included in ONE order.
-    Services and regular products can be ordered together.
-  */
+      <div class="checkout-summary-row">
+        <span>Discounts</span>
+        <strong>-${money(totals.savings)}</strong>
+      </div>
 
-  const items = entries.map(([id, quantity]) => {
-    const product = products.find(
-      item => String(item.id) === String(id)
-    );
+      <div class="checkout-summary-row checkout-summary-total">
+        <span>Total</span>
+        <strong>${checkoutMoney(totals.total)}</strong>
+      </div>
+    `;
+  }
 
-    if (product.isService) {
-      const budget = Number(product.desiredPrice || 0);
+  closeCart();
+  modal.classList.add("active");
+  document.body.style.overflow = "hidden";
+}
+
+function closeCheckout() {
+  const modal = $("checkout-modal");
+
+  if (modal) modal.classList.remove("active");
+
+  document.body.style.overflow = "";
+}
+
+if ($("checkout-button")) {
+  $("checkout-button").addEventListener("click", openCheckout);
+}
+
+if ($("checkout-close")) {
+  $("checkout-close").addEventListener("click", closeCheckout);
+}
+
+/* =========================================
+   CHECKOUT FORM
+========================================= */
+
+function getCheckoutValues() {
+  return {
+    minecraftName: $("checkout-minecraft-name")?.value.trim() || "",
+    district: $("checkout-district")?.value.trim() || "",
+    address: $("checkout-address")?.value.trim() || "",
+    note: $("checkout-note")?.value.trim() || ""
+  };
+}
+
+function validateCheckout(values) {
+  if (!values.minecraftName) {
+    return "Please enter your Minecraft username.";
+  }
+
+  if (!values.district) {
+    return "Please select your delivery district.";
+  }
+
+  if (!values.address) {
+    return "Please enter your delivery address.";
+  }
+
+  return null;
+}
+
+/* =========================================
+   ORDER ITEM PREPARATION
+========================================= */
+
+function buildOrderItems() {
+  return Object.entries(cart)
+    .filter(([id, quantity]) => Number(quantity) > 0)
+    .map(([id, quantity]) => {
+      const product = products.find(
+        item => String(item.id) === String(id)
+      );
+
+      if (!product) return null;
+
+      if (product.isService) {
+        return {
+          id: product.id,
+          name: product.name,
+          type: "service",
+          quantity: 1,
+          desired_price: Number(product.desiredPrice || 0),
+          description: product.description || ""
+        };
+      }
+
+      const stacks = Number(quantity);
+      const stackPrice = Number(product.price);
+      const manualDiscount = getManualDiscount(product);
+      const quantityDiscount = getDiscountPercent(stacks);
+
+      const priceAfterManual =
+        stackPrice * (1 - manualDiscount / 100);
+
+      const finalPrice =
+        priceAfterManual * stacks *
+        (1 - quantityDiscount / 100);
 
       return {
         id: product.id,
         name: product.name,
-        category: "Services",
-        quantity: 1,
-        price: budget,
-        final_price: budget,
-        is_service: true,
-        description: product.description || "",
-        desired_price: product.desiredPrice,
-        links: product.links || [],
-        image_urls: product.imageUrls || []
+        type: "product",
+        category: product.category,
+        quantity: stacks,
+        stack_size: Number(product.stack_size || 64),
+        price_per_stack: stackPrice,
+        manual_discount: manualDiscount,
+        quantity_discount: quantityDiscount,
+        total: Number(finalPrice.toFixed(2))
       };
+    })
+    .filter(Boolean);
+}
+
+/* =========================================
+   TOAST NOTIFICATIONS
+========================================= */
+
+function showToast(message, type = "success") {
+  let container = $("toast-container");
+
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    container.className = "toast-container";
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+
+  container.appendChild(toast);
+
+  window.setTimeout(() => {
+    toast.remove();
+
+    if (!container.children.length) {
+      container.remove();
     }
+  }, 3500);
+}
+/* =========================================
+   PLACE ORDER
+========================================= */
 
-    const stacks = Number(quantity);
-    const quantityDiscount = getDiscountPercent(stacks);
-    const finalPrice =
-      getSalePrice(product) *
-      stacks *
-      (1 - quantityDiscount / 100);
+async function placeOrder(event) {
+  if (event) event.preventDefault();
 
-    return {
-      id: product.id,
-      name: product.name,
-      category: product.category,
-      quantity: stacks,
-      price: Number(product.price),
-      discount_percent: getManualDiscount(product),
-      quantity_discount_percent: quantityDiscount,
-      final_price: finalPrice,
-      is_service: false
-    };
-  });
+  if (!currentSession) {
+    showToast("Please log in before placing an order.", "error");
+    return;
+  }
 
-  const serviceProducts = cartProducts.filter(
-    product => product.isService
-  );
+  const values = getCheckoutValues();
+  const validationError = validateCheckout(values);
 
-  const descriptions = serviceProducts.map(product =>
-    `${product.name}\n${product.description || ""}`
-  );
+  if (validationError) {
+    showToast(validationError, "error");
+    return;
+  }
 
-  const allLinks = serviceProducts.flatMap(product =>
-    product.links || []
-  );
+  const orderItems = buildOrderItems();
 
-  const allImages = serviceProducts.flatMap(product =>
-    product.imageUrls || []
-  );
+  if (!orderItems.length) {
+    showToast("Your cart is empty.", "error");
+    return;
+  }
 
-  const serviceBudgets = serviceProducts
-    .map(product => Number(product.desiredPrice || 0))
-    .filter(value => value > 0);
+  const totals = getCartTotals();
 
-  const payload = {
-    user_id: currentSession?.user?.id || null,
-    minecraft_name: name,
-    note: note || null,
-    status: "pending",
-    request_type: hasServices ? "service" : "order",
-    items,
+  const button = $("place-order-button");
 
-    description: descriptions.length
-      ? descriptions.join("\n\n---\n\n")
-      : null,
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Processing...";
+  }
 
-    links: allLinks,
-    image_urls: allImages,
-
-    desired_price: serviceBudgets.length
-      ? serviceBudgets.reduce((sum, value) => sum + value, 0)
-      : null,
-
+  const orderData = {
+    request_type: orderItems.some(item => item.type === "service")
+      ? "mixed"
+      : "product",
+    items: orderItems,
+    description: orderItems
+      .filter(item => item.type === "service")
+      .map(item => item.description)
+      .join("\n"),
+    links: [],
+    image_urls: [],
+    desired_price: totals.serviceTotal,
     subtotal: totals.original,
     discount_amount: totals.savings,
     total: totals.checkoutTotal,
-
-    due_date: dueDate,
-    delivery_district: district,
-    delivery_address: address
+    status: "pending",
+    minecraft_name: values.minecraftName,
+    note: values.note,
+    user_id: currentSession.user.id,
+    delivery_district: values.district,
+    delivery_address: values.address
   };
 
-  const submitButton = $("send-order");
+  const { error } = await supabaseClient
+    .from("orders")
+    .insert(orderData);
 
-  if (submitButton) {
-    submitButton.disabled = true;
-    submitButton.textContent = "Submitting...";
+  if (button) {
+    button.disabled = false;
+    button.textContent = "Place order";
   }
-
-  setText("checkout-message", "");
-
-  try {
-    const { error } = await supabaseClient
-      .from("orders")
-      .insert(payload);
-
-    if (error) {
-      console.error("Order submission error:", error);
-
-      setText(
-        "checkout-message",
-        `Could not place order: ${error.message}`
-      );
-
-      return;
-    }
-
-    cart = {};
-    saveCart();
-    renderCart();
-
-    $("checkout-form")?.reset();
-    $("order-modal")?.classList.remove("show");
-
-    alert(
-      hasServices
-        ? "Your order and service request have been submitted successfully!"
-        : "Your order has been submitted successfully!"
-    );
-
-  } catch (error) {
-    console.error("Unexpected checkout error:", error);
-
-    setText(
-      "checkout-message",
-      `An unexpected error occurred: ${error.message || error}`
-    );
-
-  } finally {
-    if (submitButton) {
-      submitButton.disabled = false;
-      submitButton.textContent = "Place order →";
-    }
-  }
-}
-
-/* =========================================
-   SEARCH
-========================================= */
-
-$("search")?.addEventListener("input", () => {
-  if (category === "All") {
-    renderOffers();
-  } else if (category !== "Services") {
-    renderProducts();
-  }
-});
-
-/* =========================================
-   ADMIN AUTHENTICATION
-========================================= */
-
-$("admin-login-open")?.addEventListener("click", () => {
-  if (isAdmin) {
-    showAdminDashboard();
-  } else {
-    $("admin-login-modal")?.classList.add("show");
-  }
-});
-
-$("admin-login-form")?.addEventListener("submit", async event => {
-  event.preventDefault();
-
-  const email = $("admin-email").value.trim();
-  const password = $("admin-password").value;
-
-  const { data, error } = await supabaseClient.auth.signInWithPassword({
-    email,
-    password
-  });
 
   if (error) {
-    setText("admin-login-message", error.message);
+    console.error("Order error:", error);
+    showToast(`Could not place order: ${error.message}`, "error");
     return;
   }
 
-  currentSession = data.session;
-  await checkAdmin();
+  cart = {};
+  saveCart();
+  renderCart();
 
-  if (isAdmin) {
-    showAdminDashboard();
-  }
-});
+  closeCheckout();
 
-async function initializeAuth() {
-  const { data } = await supabaseClient.auth.getSession();
-
-  currentSession = data.session;
-  await checkAdmin();
-
-  supabaseClient.auth.onAuthStateChange((_event, session) => {
-    currentSession = session;
-    setTimeout(() => checkAdmin(), 0);
-  });
-}
-
-/* =========================================
-   ADMIN REQUESTS NAVIGATION
-========================================= */
-
-function updateRequestsNav() {
-  let requestsTab = document.querySelector("[data-requests-tab]");
-
-  if (isAdmin) {
-    if (!requestsTab) {
-      const nav = document.querySelector(".nav") ||
-                  document.querySelector("nav");
-
-      if (!nav) return;
-
-      requestsTab = document.createElement("a");
-
-      requestsTab.href = "#requests";
-      requestsTab.className = "nav-link";
-      requestsTab.textContent = "Requests";
-      requestsTab.setAttribute("data-requests-tab", "true");
-
-      nav.appendChild(requestsTab);
-
-      requestsTab.addEventListener("click", event => {
-        event.preventDefault();
-
-        document.querySelectorAll(".nav-link").forEach(link => {
-          link.classList.remove("active");
-        });
-
-        requestsTab.classList.add("active");
-        showAdminDashboard();
-      });
-    }
-
-    requestsTab.style.display = "";
-  } else if (requestsTab) {
-    requestsTab.remove();
-  }
-}
-
-async function checkAdmin() {
-  isAdmin = false;
-
-  if (currentSession?.user) {
-    const { data, error } = await supabaseClient
-      .from("profiles")
-      .select("role")
-      .eq("id", currentSession.user.id)
-      .maybeSingle();
-
-    if (!error && data && ["admin", "editor"].includes(data.role)) {
-      isAdmin = true;
-    }
+  if ($("checkout-form")) {
+    $("checkout-form").reset();
   }
 
-  $("admin-login-modal")?.classList.remove("show");
-
-  if (isAdmin) {
-    $("admin-login-open")?.classList.add("is-admin");
-
-    updateRequestsNav();
-    renderProducts();
-    renderOffers();
-  } else {
-    $("admin-login-open")?.classList.remove("is-admin");
-    updateRequestsNav();
-  }
-}
-
-$("admin-logout")?.addEventListener("click", async () => {
-  await supabaseClient.auth.signOut();
-
-  isAdmin = false;
-  currentSession = null;
-
-  updateRequestsNav();
-
-  if ($("admin-section")) {
-    $("admin-section").style.display = "none";
-  }
-
-  showCategory("All");
-});
-
-/* =========================================
-   ADMIN DASHBOARD
-========================================= */
-
-async function showAdminDashboard() {
-  if (!isAdmin) return;
-
-  if ($("offers")) $("offers").style.display = "none";
-  if ($("shop")) $("shop").style.display = "none";
-  if ($("admin-section")) $("admin-section").style.display = "";
+  showToast("Your order has been submitted successfully.");
 
   await loadRequests();
 }
 
-$("refresh-requests")?.addEventListener("click", loadRequests);
-
-document.querySelectorAll("[data-filter]").forEach(button => {
-  button.addEventListener("click", () => {
-    currentRequestFilter = button.dataset.filter;
-
-    document.querySelectorAll("[data-filter]").forEach(item =>
-      item.classList.toggle("active", item === button)
-    );
-
-    renderRequests();
-  });
-});
-
-async function loadRequests() {
-  if (!isAdmin) return;
-
-  const container = $("admin-requests");
-
-  if (container) {
-    container.innerHTML =
-      `<div class="loading-state">Loading requests...</div>`;
-  }
-
-  const { data, error } = await supabaseClient
-    .from("orders")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    console.error(error);
-
-    if (container) {
-      container.innerHTML =
-        `<p class="error-message">Could not load requests: ${escapeHTML(error.message)}</p>`;
-    }
-
-    return;
-  }
-
-  requests = data || [];
-  renderRequests();
-}
-
-function renderRequests() {
-  const container = $("admin-requests");
-  if (!container) return;
-
-  const filtered = requests.filter(request =>
-    currentRequestFilter === "all" ||
-    request.status === currentRequestFilter
-  );
-
-  if (!filtered.length) {
-    container.innerHTML =
-      `<div class="empty-state"><h3>No requests found</h3></div>`;
-    return;
-  }
-
-  container.innerHTML = filtered.map(request => {
-    const items = Array.isArray(request.items) ? request.items : [];
-    const links = Array.isArray(request.links) ? request.links : [];
-    const images = Array.isArray(request.image_urls) ? request.image_urls : [];
-
-    return `
-      <article class="request-card">
-        <div class="request-card-header">
-          <div>
-            <div class="eyebrow">
-              REQUEST #${escapeHTML(String(request.id).slice(0, 8))}
-            </div>
-
-            <h3>${escapeHTML(request.minecraft_name || "Unknown player")}</h3>
-
-            <p class="muted">
-              Submitted ${formatDate(request.created_at)}
-            </p>
-          </div>
-
-          <span class="request-status status-${escapeHTML(request.status)}">
-            ${escapeHTML(request.status)}
-          </span>
-        </div>
-
-        <div class="request-delivery">
-          <div class="delivery-heading">DELIVERY DETAILS</div>
-
-          <div>
-            <strong>Desired date:</strong>
-            ${formatDateOnly(request.due_date)}
-          </div>
-
-          <div>
-            <strong>District:</strong>
-            ${escapeHTML(request.delivery_district || "Not specified")}
-          </div>
-
-          <div>
-            <strong>Address:</strong>
-            ${escapeHTML(request.delivery_address || "Not specified")}
-          </div>
-        </div>
-
-        <div class="request-content">
-          <h4>${request.request_type === "service" ? "Order / service request" : "Order items"}</h4>
-
-          ${items.map(item => `
-            <div class="request-item">
-              <span>
-                ${escapeHTML(item.name)} × ${Number(item.quantity || 1)}
-                ${item.is_service ? " (Service)" : ""}
-              </span>
-
-              <span>${money(item.final_price ?? item.price ?? 0)}</span>
-            </div>
-
-            ${item.is_service && item.description ? `
-              <div class="request-description">
-                <strong>Service description:</strong>
-                <p>${escapeHTML(item.description)}</p>
-              </div>
-            ` : ""}
-          `).join("")}
-
-          ${request.description ? `
-            <div class="request-description">
-              <strong>Description:</strong>
-              <p>${escapeHTML(request.description)}</p>
-            </div>
-          ` : ""}
-
-          ${request.note ? `
-            <div class="request-description">
-              <strong>Customer note:</strong>
-              <p>${escapeHTML(request.note)}</p>
-            </div>
-          ` : ""}
-
-          ${request.desired_price != null ? `
-            <p>
-              <strong>Desired service budget:</strong>
-              ${money(request.desired_price)}
-            </p>
-          ` : ""}
-
-          ${links.length ? `
-            <div class="request-links">
-              <strong>Links:</strong>
-
-              ${links.map(link => {
-                const url = safeExternalUrl(link);
-
-                return url
-                  ? `<a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(url)}</a>`
-                  : "";
-              }).join("")}
-            </div>
-          ` : ""}
-
-          ${images.length ? `
-            <div class="request-images">
-              ${images.map(url => {
-                const safeUrl = safeExternalUrl(url);
-
-                return safeUrl
-                  ? `<a href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHTML(safeUrl)}" alt="Customer attachment"></a>`
-                  : "";
-              }).join("")}
-            </div>
-          ` : ""}
-        </div>
-
-        <div class="request-financials">
-          <div>
-            <span>Subtotal</span>
-            <strong>${money(request.subtotal)}</strong>
-          </div>
-
-          <div>
-            <span>Discount</span>
-            <strong>-${money(request.discount_amount)}</strong>
-          </div>
-
-          <div class="request-final-total">
-            <span>Total</span>
-            <strong>${money(request.total)}</strong>
-          </div>
-        </div>
-
-        <div class="request-actions">
-          <button
-            class="status-action"
-            data-status-id="${escapeHTML(request.id)}"
-            data-status="pending"
-            type="button"
-          >Pending</button>
-
-          <button
-            class="status-action"
-            data-status-id="${escapeHTML(request.id)}"
-            data-status="accepted"
-            type="button"
-          >Accept</button>
-
-          <button
-            class="status-action"
-            data-status-id="${escapeHTML(request.id)}"
-            data-status="completed"
-            type="button"
-          >Complete</button>
-
-          <button
-            class="status-action danger"
-            data-status-id="${escapeHTML(request.id)}"
-            data-status="rejected"
-            type="button"
-          >Reject</button>
-
-          <button
-            class="status-action danger"
-            data-delete-id="${escapeHTML(request.id)}"
-            type="button"
-          >Delete</button>
-        </div>
-      </article>
-    `;
-  }).join("");
-
-  container.querySelectorAll("[data-status-id]").forEach(button => {
-    button.addEventListener("click", () => {
-      updateRequestStatus(
-        button.dataset.statusId,
-        button.dataset.status
-      );
-    });
-  });
-
-  container.querySelectorAll("[data-delete-id]").forEach(button => {
-    button.addEventListener("click", () => {
-      deleteRequest(button.dataset.deleteId);
-    });
-  });
-}
-
-async function updateRequestStatus(id, status) {
-  if (!isAdmin) return;
-
-  const { error } = await supabaseClient
-    .from("orders")
-    .update({ status })
-    .eq("id", id);
-
-  if (error) {
-    alert(`Could not update request: ${error.message}`);
-    return;
-  }
-
-  await loadRequests();
-}
-
-async function deleteRequest(id) {
-  if (!isAdmin) return;
-
-  const confirmed = confirm(
-    "Are you sure you want to permanently delete this request?"
-  );
-
-  if (!confirmed) return;
-
-  const { error } = await supabaseClient
-    .from("orders")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    alert(`Could not delete request: ${error.message}`);
-    return;
-  }
-
-  requests = requests.filter(request =>
-    String(request.id) !== String(id)
-  );
-
-  renderRequests();
+if ($("checkout-form")) {
+  $("checkout-form").addEventListener("submit", placeOrder);
 }
 
 /* =========================================
@@ -1554,51 +1188,68 @@ async function deleteRequest(id) {
 
 function renderServiceForm() {
   const container = $("products");
+
   if (!container) return;
 
+  if ($("service-request-form")) return;
+
   container.innerHTML = `
-    <div class="service-request-card">
-      <div class="eyebrow">CUSTOM PROJECTS</div>
+    <div class="service-request-card" id="service-request-form">
+      <div class="eyebrow">BRAT LTD. SERVICES</div>
+      <h2>Request a <span class="orange">custom service.</span></h2>
 
-      <h2>Request a <span class="orange">service.</span></h2>
-
-      <p class="muted">
-        Tell us what you need and our team will review your request.
+      <p>
+        Tell us what you need. Our team will review your request
+        and get back to you.
       </p>
 
-      <form id="service-request-form">
-        <label for="service-title">Request title *</label>
-
+      <form id="service-form">
+        <label for="service-title">Service title</label>
         <input
           id="service-title"
           type="text"
           maxlength="100"
+          placeholder="e.g. Custom building project"
           required
-          placeholder="What do you need?"
         >
 
-        <label for="service-description">Description *</label>
-
+        <label for="service-description">Description</label>
         <textarea
           id="service-description"
-          rows="5"
           maxlength="3000"
+          placeholder="Describe your project and requirements..."
           required
-          placeholder="Describe your project..."
         ></textarea>
 
-        <label for="service-links">Reference links (optional)</label>
+        <div class="form-row">
+          <div>
+            <label for="service-budget">Budget (KB$)</label>
+            <input
+              id="service-budget"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Optional"
+            >
+          </div>
 
+          <div>
+            <label for="service-deadline">Desired deadline</label>
+            <input
+              id="service-deadline"
+              type="date"
+            >
+          </div>
+        </div>
+
+        <label for="service-links">Reference links</label>
         <textarea
           id="service-links"
-          rows="2"
-          placeholder="One URL per line"
+          maxlength="1500"
+          placeholder="Add links to images or examples..."
         ></textarea>
 
-        <label for="service-images">
-          Reference images (optional, max. 5 images)
-        </label>
-
+        <label for="service-images">Reference images</label>
         <input
           id="service-images"
           type="file"
@@ -1606,20 +1257,12 @@ function renderServiceForm() {
           multiple
         >
 
-        <label for="service-budget">
-          Desired budget in KB$ (optional)
-        </label>
-
-        <input
-          id="service-budget"
-          type="number"
-          min="0"
-          step="0.01"
-          placeholder="Your budget"
-        >
+        <p class="form-hint">
+          You can upload up to 5 images.
+        </p>
 
         <button class="primary-button full-width" type="submit">
-          Add service request to cart →
+          Submit service request
         </button>
 
         <p id="service-message" class="form-message"></p>
@@ -1627,127 +1270,1054 @@ function renderServiceForm() {
     </div>
   `;
 
-  $("service-request-form").addEventListener(
-    "submit",
-    addServiceRequestToCart
-  );
+  $("service-form").addEventListener("submit", submitServiceRequest);
 }
 
-async function addServiceRequestToCart(event) {
+/* =========================================
+   SERVICE IMAGE UPLOAD
+========================================= */
+
+async function uploadServiceImages(files) {
+  const uploadedUrls = [];
+  const selectedFiles = Array.from(files || []).slice(0, 5);
+
+  for (const file of selectedFiles) {
+    if (!file.type.startsWith("image/")) {
+      throw new Error("Only image files are allowed.");
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error("Each image must be smaller than 5 MB.");
+    }
+
+    const extension = file.name.split(".").pop() || "png";
+
+    const fileName =
+      `${currentSession.user.id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+
+    const { error } = await supabaseClient.storage
+      .from("service-attachments")
+      .upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: false
+      });
+
+    if (error) throw error;
+
+    const { data } = supabaseClient.storage
+      .from("service-attachments")
+      .getPublicUrl(fileName);
+
+    uploadedUrls.push(data.publicUrl);
+  }
+
+  return uploadedUrls;
+}
+
+/* =========================================
+   SUBMIT SERVICE REQUEST
+========================================= */
+
+async function submitServiceRequest(event) {
   event.preventDefault();
+
+  if (!currentSession) {
+    showToast("Please log in before submitting a request.", "error");
+    return;
+  }
 
   const title = $("service-title").value.trim();
   const description = $("service-description").value.trim();
+  const budgetValue = $("service-budget").value;
+  const deadline = $("service-deadline").value || null;
 
   const links = $("service-links").value
     .split("\n")
-    .map(item => item.trim())
-    .filter(Boolean);
+    .map(value => value.trim())
+    .filter(Boolean)
+    .filter(value => safeExternalUrl(value));
 
-  const files = Array.from($("service-images").files || []);
-  const desiredPrice = $("service-budget").value;
+  const files = $("service-images").files;
 
   if (!title || !description) {
-    setText("service-message", "Please enter a title and description.");
+    showToast("Please complete all required fields.", "error");
     return;
   }
 
-  if (desiredPrice !== "" && Number(desiredPrice) < 0) {
-    setText("service-message", "Please enter a valid budget.");
+  if (budgetValue && Number(budgetValue) < 0) {
+    showToast("Please enter a valid budget.", "error");
     return;
   }
 
-  if (files.length > 5) {
-    setText("service-message", "You can upload a maximum of 5 images.");
-    return;
-  }
+  const button = event.submitter;
 
-  if (files.some(file => file.size > 5 * 1024 * 1024)) {
-    setText("service-message", "Each image must be smaller than 5 MB.");
-    return;
-  }
-
-  if (links.some(link => !safeExternalUrl(link))) {
-    setText("service-message", "Please enter valid http/https links.");
-    return;
-  }
-
-  const submitButton = event.target.querySelector(
-    'button[type="submit"]'
-  );
-
-  if (submitButton) {
-    submitButton.disabled = true;
-    submitButton.textContent = "Uploading...";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Uploading...";
   }
 
   try {
-    const imageUrls = [];
+    const imageUrls = await uploadServiceImages(files);
 
-    for (const file of files) {
-      const fileName =
-        `${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const desiredPrice =
+      budgetValue === "" ? null : Number(budgetValue);
 
-      const { data, error } = await supabaseClient.storage
-        .from("service-attachments")
-        .upload(fileName, file);
-
-      if (error) {
-        throw new Error(`Image upload failed: ${error.message}`);
-      }
-
-      const { data: publicData } = supabaseClient.storage
-        .from("service-attachments")
-        .getPublicUrl(data.path);
-
-      imageUrls.push(publicData.publicUrl);
-    }
-
-    const serviceProduct = {
-      id: `service-${Date.now()}`,
-      name: title,
-      category: "Services",
+    const orderData = {
+      request_type: "service",
+      items: [{
+        type: "service",
+        name: title,
+        quantity: 1,
+        description
+      }],
       description,
-      price: Number(desiredPrice || 0),
-      stack_size: 1,
-      discount_percent: 0,
-      isService: true,
       links,
-      imageUrls,
-      desiredPrice: desiredPrice !== ""
-        ? Number(desiredPrice)
-        : null
+      image_urls: imageUrls,
+      desired_price: desiredPrice,
+      subtotal: desiredPrice || 0,
+      discount_amount: 0,
+      total: desiredPrice || 0,
+      status: "pending",
+      minecraft_name: currentSession.user.user_metadata?.minecraft_name || "",
+      note: "",
+      user_id: currentSession.user.id,
+      due_date: deadline
     };
 
-    cart[serviceProduct.id] = 1;
-    products.push(serviceProduct);
+    const { error } = await supabaseClient
+      .from("orders")
+      .insert(orderData);
 
-    saveCart();
-    renderCart();
+    if (error) throw error;
 
-    setText(
-      "service-message",
-      "Service request added to cart. Your budget will be included in the order total."
-    );
+    $("service-form").reset();
 
-    event.target.reset();
+    showToast("Your service request has been submitted.");
+
+    await loadRequests();
 
   } catch (error) {
-    console.error(error);
-    setText("service-message", error.message || "Could not add service request.");
+    console.error("Service request error:", error);
+    showToast(`Request failed: ${error.message}`, "error");
 
   } finally {
-    if (submitButton) {
-      submitButton.disabled = false;
-      submitButton.textContent = "Add service request to cart →";
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Submit service request";
     }
+  }
+}
+/* =========================================
+   AUTHENTICATION
+========================================= */
+
+async function loadSession() {
+  const {
+    data: { session },
+    error
+  } = await supabaseClient.auth.getSession();
+
+  if (error) {
+    console.error("Session error:", error);
+    return;
+  }
+
+  currentSession = session;
+
+  await updateAuthUI();
+
+  if (currentSession) {
+    await checkAdminRole();
+  }
+}
+
+async function updateAuthUI() {
+  const loginButton = $("login-button");
+  const accountButton = $("account-button");
+  const logoutButton = $("logout-button");
+  const userLabel = $("user-label");
+
+  if (currentSession) {
+    const username =
+      currentSession.user.user_metadata?.minecraft_name ||
+      currentSession.user.email;
+
+    if (loginButton) loginButton.hidden = true;
+    if (accountButton) accountButton.hidden = false;
+    if (logoutButton) logoutButton.hidden = false;
+
+    if (userLabel) {
+      userLabel.textContent = username;
+    }
+
+  } else {
+    if (loginButton) loginButton.hidden = false;
+    if (accountButton) accountButton.hidden = true;
+    if (logoutButton) logoutButton.hidden = true;
+
+    if (userLabel) {
+      userLabel.textContent = "";
+    }
+
+    isAdmin = false;
   }
 }
 
 /* =========================================
-   STARTUP
+   LOGIN MODAL
 ========================================= */
 
-renderCart();
-loadProducts();
-initializeAuth();
+function openLogin() {
+  const modal = $("login-modal");
+
+  if (modal) {
+    modal.classList.add("show");
+  }
+}
+
+function closeLogin() {
+  const modal = $("login-modal");
+
+  if (modal) {
+    modal.classList.remove("show");
+  }
+}
+
+if ($("login-button")) {
+  $("login-button").addEventListener("click", openLogin);
+}
+
+if ($("login-close")) {
+  $("login-close").addEventListener("click", closeLogin);
+}
+
+if ($("login-modal")) {
+  $("login-modal").addEventListener("click", event => {
+    if (event.target === $("login-modal")) {
+      closeLogin();
+    }
+  });
+}
+
+/* =========================================
+   SIGN IN
+========================================= */
+
+async function signIn(event) {
+  event.preventDefault();
+
+  const email = $("login-email").value.trim();
+  const password = $("login-password").value;
+
+  const message = $("login-message");
+
+  if (message) {
+    message.textContent = "Signing in...";
+  }
+
+  const { data, error } = await supabaseClient.auth
+    .signInWithPassword({
+      email,
+      password
+    });
+
+  if (error) {
+    if (message) {
+      message.textContent = error.message;
+    }
+
+    return;
+  }
+
+  currentSession = data.session;
+
+  await updateAuthUI();
+  await checkAdminRole();
+
+  closeLogin();
+
+  showToast("Successfully signed in.");
+
+  if ($("login-form")) {
+    $("login-form").reset();
+  }
+}
+
+if ($("login-form")) {
+  $("login-form").addEventListener("submit", signIn);
+}
+
+/* =========================================
+   SIGN OUT
+========================================= */
+
+async function signOut() {
+  const { error } = await supabaseClient.auth.signOut();
+
+  if (error) {
+    showToast(error.message, "error");
+    return;
+  }
+
+  currentSession = null;
+  isAdmin = false;
+
+  await updateAuthUI();
+
+  showCategory("All");
+
+  showToast("You have been signed out.");
+}
+
+if ($("logout-button")) {
+  $("logout-button").addEventListener("click", signOut);
+}
+
+/* =========================================
+   ADMIN ROLE CHECK
+========================================= */
+
+async function checkAdminRole() {
+  if (!currentSession) {
+    isAdmin = false;
+    return;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("role")
+    .eq("id", currentSession.user.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Role check failed:", error);
+    isAdmin = false;
+    return;
+  }
+
+  isAdmin = data?.role === "admin" || data?.role === "editor";
+
+  const adminButton = $("admin-button");
+
+  if (adminButton) {
+    adminButton.hidden = !isAdmin;
+  }
+
+  if (isAdmin) {
+    await loadRequests();
+    await loadCatalogProducts();
+  }
+}
+
+/* =========================================
+   AUTH STATE CHANGES
+========================================= */
+
+supabaseClient.auth.onAuthStateChange((_event, session) => {
+  currentSession = session;
+
+  setTimeout(async () => {
+    await updateAuthUI();
+
+    if (session) {
+      await checkAdminRole();
+    } else {
+      isAdmin = false;
+    }
+  }, 0);
+});
+/* =========================================
+   ADMIN DASHBOARD
+========================================= */
+
+function openAdmin() {
+  if (!isAdmin) {
+    showToast("You do not have permission to access the admin area.", "error");
+    return;
+  }
+
+  const adminSection = $("admin-section");
+
+  if (adminSection) {
+    adminSection.hidden = false;
+    adminSection.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }
+
+  showCategory("Admin");
+
+  loadRequests();
+  loadCatalogProducts();
+}
+
+function closeAdmin() {
+  const adminSection = $("admin-section");
+
+  if (adminSection) {
+    adminSection.hidden = true;
+  }
+
+  showCategory("All");
+}
+
+if ($("admin-button")) {
+  $("admin-button").addEventListener("click", openAdmin);
+}
+
+if ($("admin-close")) {
+  $("admin-close").addEventListener("click", closeAdmin);
+}
+
+/* =========================================
+   LOAD ORDERS / REQUESTS
+========================================= */
+
+async function loadRequests() {
+  if (!isAdmin) return;
+
+  const { data, error } = await supabaseClient
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Could not load orders:", error);
+    showToast("Could not load orders.", "error");
+    return;
+  }
+
+  requests = data || [];
+
+  renderRequests();
+  renderAdminStats();
+}
+
+/* =========================================
+   ADMIN STATISTICS
+========================================= */
+
+function renderAdminStats() {
+  const totalOrders = requests.length;
+
+  const pendingOrders = requests.filter(
+    request => request.status === "pending"
+  ).length;
+
+  const completedOrders = requests.filter(
+    request => request.status === "completed"
+  ).length;
+
+  const totalRevenue = requests
+    .filter(request => request.status === "completed")
+    .reduce((sum, request) => sum + Number(request.total || 0), 0);
+
+  setText("admin-total-orders", totalOrders);
+  setText("admin-pending-orders", pendingOrders);
+  setText("admin-completed-orders", completedOrders);
+  setText("admin-revenue", money(totalRevenue));
+}
+
+/* =========================================
+   REQUEST FILTER
+========================================= */
+
+function filterRequests(filter) {
+  currentRequestFilter = filter;
+
+  document.querySelectorAll("[data-request-filter]").forEach(button => {
+    button.classList.toggle(
+      "active",
+      button.dataset.requestFilter === filter
+    );
+  });
+
+  renderRequests();
+}
+
+document.querySelectorAll("[data-request-filter]").forEach(button => {
+  button.addEventListener("click", () => {
+    filterRequests(button.dataset.requestFilter);
+  });
+});
+
+/* =========================================
+   RENDER REQUESTS
+========================================= */
+
+function renderRequests() {
+  const container = $("admin-requests");
+
+  if (!container) return;
+
+  let filteredRequests = [...requests];
+
+  if (currentRequestFilter !== "all") {
+    filteredRequests = filteredRequests.filter(
+      request => request.status === currentRequestFilter
+    );
+  }
+
+  if (!filteredRequests.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <h3>No orders found</h3>
+        <p>There are currently no orders in this category.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filteredRequests.map(request => {
+    const items = Array.isArray(request.items)
+      ? request.items
+      : [];
+
+    const itemList = items.map(item => `
+      <div class="request-item">
+        <span>${escapeHTML(item.name || "Unknown item")}</span>
+        <span>× ${Number(item.quantity || 1)}</span>
+      </div>
+    `).join("");
+
+    const status = escapeHTML(request.status || "pending");
+
+    return `
+      <article class="admin-request-card">
+        <div class="request-header">
+          <div>
+            <span class="request-number">
+              ORDER #${escapeHTML(String(request.id).slice(0, 8))}
+            </span>
+            <h3>${escapeHTML(request.minecraft_name || "Unknown player")}</h3>
+          </div>
+
+          <span class="status-badge status-${status}">
+            ${status.toUpperCase()}
+          </span>
+        </div>
+
+        <div class="request-meta">
+          <span>${formatDate(request.created_at)}</span>
+          <span>${money(request.total || 0)}</span>
+          <span>${escapeHTML(request.request_type || "product")}</span>
+        </div>
+
+        <div class="request-items">
+          ${itemList || "<p>No item details available.</p>"}
+        </div>
+
+        ${
+          request.description
+            ? `<div class="request-description">
+                 <strong>Description</strong>
+                 <p>${escapeHTML(request.description)}</p>
+               </div>`
+            : ""
+        }
+
+        ${
+          request.note
+            ? `<div class="request-description">
+                 <strong>Customer note</strong>
+                 <p>${escapeHTML(request.note)}</p>
+               </div>`
+            : ""
+        }
+
+        ${
+          request.delivery_district || request.delivery_address
+            ? `<div class="request-description">
+                 <strong>Delivery</strong>
+                 <p>
+                   ${escapeHTML(request.delivery_district || "")}
+                   ${escapeHTML(request.delivery_address || "")}
+                 </p>
+               </div>`
+            : ""
+        }
+
+        ${
+          Array.isArray(request.links) && request.links.length
+            ? `<div class="request-links">
+                 <strong>Reference links</strong>
+                 ${request.links.map(link => {
+                   const safeLink = safeExternalUrl(link);
+                   return safeLink
+                     ? `<a href="${escapeHTML(safeLink)}" target="_blank" rel="noopener noreferrer">Open reference</a>`
+                     : "";
+                 }).join("")}
+               </div>`
+            : ""
+        }
+
+        ${
+          Array.isArray(request.image_urls) && request.image_urls.length
+            ? `<div class="request-images">
+                 ${request.image_urls.map(url => {
+                   const safeUrl = safeExternalUrl(url);
+                   return safeUrl
+                     ? `<a href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer">
+                          <img src="${escapeHTML(safeUrl)}" alt="Reference image" loading="lazy">
+                        </a>`
+                     : "";
+                 }).join("")}
+               </div>`
+            : ""
+        }
+
+        <div class="request-actions">
+          <select
+            data-status-select="${escapeHTML(request.id)}"
+            aria-label="Change order status"
+          >
+            <option value="pending" ${status === "pending" ? "selected" : ""}>Pending</option>
+            <option value="processing" ${status === "processing" ? "selected" : ""}>Processing</option>
+            <option value="completed" ${status === "completed" ? "selected" : ""}>Completed</option>
+            <option value="cancelled" ${status === "cancelled" ? "selected" : ""}>Cancelled</option>
+          </select>
+
+          <button
+            class="secondary-button"
+            data-update-status="${escapeHTML(request.id)}"
+          >
+            Update status
+          </button>
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  container.querySelectorAll("[data-update-status]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.updateStatus;
+      const select = container.querySelector(
+        `[data-status-select="${CSS.escape(id)}"]`
+      );
+
+      if (!select) return;
+
+      await updateRequestStatus(id, select.value);
+    });
+  });
+}
+
+/* =========================================
+   UPDATE REQUEST STATUS
+========================================= */
+
+async function updateRequestStatus(id, status) {
+  const allowedStatuses = [
+    "pending",
+    "processing",
+    "completed",
+    "cancelled"
+  ];
+
+  if (!allowedStatuses.includes(status)) {
+    showToast("Invalid status.", "error");
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("orders")
+    .update({ status })
+    .eq("id", id);
+
+  if (error) {
+    console.error("Status update failed:", error);
+    showToast(error.message, "error");
+    return;
+  }
+
+  showToast("Order status updated.");
+
+  await loadRequests();
+}
+/* =========================================
+   LOAD COMPLETE PRODUCT CATALOG
+========================================= */
+
+async function loadCatalogProducts() {
+  if (!isAdmin) return;
+
+  const container = $("catalog-products");
+
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="loading-state">Loading catalogue...</div>
+  `;
+
+  const { data, error } = await supabaseClient
+    .from("products")
+    .select("*")
+    .order("category")
+    .order("name");
+
+  if (error) {
+    console.error("Catalogue error:", error);
+
+    container.innerHTML = `
+      <p class="error-message">
+        Could not load catalogue: ${escapeHTML(error.message)}
+      </p>
+    `;
+    return;
+  }
+
+  renderCatalogProducts(data || []);
+}
+
+/* =========================================
+   RENDER CATALOGUE
+========================================= */
+
+function renderCatalogProducts(catalog) {
+  const container = $("catalog-products");
+
+  if (!container) return;
+
+  const searchValue = (
+    $("catalog-search")?.value || ""
+  ).toLowerCase();
+
+  const filtered = catalog.filter(product =>
+    String(product.name || "").toLowerCase().includes(searchValue)
+  );
+
+  if (!filtered.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <h3>No products found</h3>
+        <p>Try another search or import products.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="catalog-table-wrapper">
+      <table class="catalog-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Category</th>
+            <th>Price</th>
+            <th>Stack size</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          ${filtered.map(product => `
+            <tr>
+              <td>
+                <strong>${escapeHTML(product.name)}</strong>
+              </td>
+
+              <td>${escapeHTML(product.category || "Items")}</td>
+
+              <td>
+                ${Number(product.price || 0) > 0
+                  ? money(product.price)
+                  : "Not set"}
+              </td>
+
+              <td>${Number(product.stack_size || 64)}</td>
+
+              <td>
+                <span class="status-badge ${
+                  product.is_active ? "status-completed" : "status-pending"
+                }">
+                  ${product.is_active ? "Active" : "Inactive"}
+                </span>
+              </td>
+
+              <td>
+                <button
+                  class="secondary-button"
+                  data-catalog-edit="${escapeHTML(product.id)}"
+                >
+                  Edit
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.querySelectorAll("[data-catalog-edit]").forEach(button => {
+    button.addEventListener("click", () => {
+      const product = catalog.find(
+        item => String(item.id) === button.dataset.catalogEdit
+      );
+
+      if (product) openProductEditor(product);
+    });
+  });
+}
+
+if ($("catalog-search")) {
+  $("catalog-search").addEventListener("input", loadCatalogProducts);
+}
+
+/* =========================================
+   CREATE NEW PRODUCT
+========================================= */
+
+async function createCatalogProduct() {
+  if (!isAdmin) return;
+
+  const name = prompt("Enter the Minecraft item name:");
+
+  if (!name || !name.trim()) return;
+
+  const category = prompt(
+    "Category: Blocks, Items, Armor & Weapons, Enchantments",
+    "Items"
+  );
+
+  const validCategories = [
+    "Blocks",
+    "Items",
+    "Armor & Weapons",
+    "Enchantments"
+  ];
+
+  if (!validCategories.includes(category)) {
+    showToast("Invalid category.", "error");
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("products")
+    .insert({
+      name: name.trim(),
+      category,
+      description: "",
+      price: 0,
+      stack_size: 64,
+      discount_percent: 0,
+      is_active: false
+    });
+
+  if (error) {
+    showToast(error.message, "error");
+    return;
+  }
+
+  showToast("Product added to catalogue.");
+  await loadCatalogProducts();
+}
+
+if ($("catalog-add-button")) {
+  $("catalog-add-button").addEventListener(
+    "click",
+    createCatalogProduct
+  );
+}
+
+/* =========================================
+   IMPORT PRODUCTS FROM JSON OR CSV
+========================================= */
+
+function parseCatalogCSV(text) {
+  const lines = text
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter(line => line.trim());
+
+  if (lines.length < 2) {
+    throw new Error("The CSV file is empty.");
+  }
+
+  const separator = lines[0].includes(";") ? ";" : ",";
+
+  function parseLine(line) {
+    const result = [];
+    let value = "";
+    let insideQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+
+      if (char === '"') {
+        if (insideQuotes && line[i + 1] === '"') {
+          value += '"';
+          i++;
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+      } else if (char === separator && !insideQuotes) {
+        result.push(value.trim());
+        value = "";
+      } else {
+        value += char;
+      }
+    }
+
+    result.push(value.trim());
+    return result;
+  }
+
+  const headers = parseLine(lines[0]).map(header =>
+    header.trim().toLowerCase()
+  );
+
+  return lines.slice(1).map(line => {
+    const values = parseLine(line);
+    const product = {};
+
+    headers.forEach((header, index) => {
+      product[header] = values[index] || "";
+    });
+
+    return product;
+  });
+}
+
+function normalizeImportedProduct(raw) {
+  const name = String(
+    raw.name || raw.title || raw.item || ""
+  ).trim();
+
+  if (!name) return null;
+
+  const validCategories = [
+    "Blocks",
+    "Items",
+    "Armor & Weapons",
+    "Enchantments"
+  ];
+
+  const requestedCategory = String(
+    raw.category || "Items"
+  ).trim();
+
+  const category = validCategories.includes(requestedCategory)
+    ? requestedCategory
+    : "Items";
+
+  const stackSize = Number(
+    raw.stack_size || raw.stackSize || 64
+  );
+
+  return {
+    name,
+    category,
+    description: String(raw.description || ""),
+    price: 0,
+    stack_size: [1, 16, 64].includes(stackSize) ? stackSize : 64,
+    discount_percent: 0,
+    is_active: false
+  };
+}
+
+async function importCatalogFile(file) {
+  if (!isAdmin || !file) return;
+
+  try {
+    const text = await file.text();
+
+    let imported;
+
+    if (file.name.toLowerCase().endsWith(".json")) {
+      imported = JSON.parse(text);
+    } else if (file.name.toLowerCase().endsWith(".csv")) {
+      imported = parseCatalogCSV(text);
+    } else {
+      throw new Error("Please select a JSON or CSV file.");
+    }
+
+    if (!Array.isArray(imported)) {
+      throw new Error("The import file must contain a product array.");
+    }
+
+    const normalized = imported
+      .map(normalizeImportedProduct)
+      .filter(Boolean);
+
+    if (!normalized.length) {
+      throw new Error("No valid products were found.");
+    }
+
+    const uniqueProducts = [
+      ...new Map(
+        normalized.map(product => [
+          product.name.toLowerCase(),
+          product
+        ])
+      ).values()
+    ];
+
+    const confirmed = confirm(
+      `Import ${uniqueProducts.length} products?\n\n` +
+      "All imported products will be inactive and have no price."
+    );
+
+    if (!confirmed) return;
+
+    const { error } = await supabaseClient
+      .from("products")
+      .upsert(uniqueProducts, {
+        onConflict: "name",
+        ignoreDuplicates: true
+      });
+
+    if (error) throw error;
+
+    showToast(`${uniqueProducts.length} products imported.`);
+    await loadCatalogProducts();
+    await loadProducts();
+
+  } catch (error) {
+    console.error("Import error:", error);
+    showToast(`Import failed: ${error.message}`, "error");
+  }
+}
+
+if ($("catalog-import-file")) {
+  $("catalog-import-file").addEventListener("change", event => {
+    const file = event.target.files?.[0];
+
+    if (file) {
+      importCatalogFile(file);
+    }
+
+    event.target.value = "";
+  });
+}
+
+/* =========================================
+   INITIALIZE SHOP
+========================================= */
+
+async function initializeShop() {
+  try {
+    await loadSession();
+
+    await loadProducts();
+
+    renderCart();
+
+    showCategory("All");
+
+    if (currentSession && isAdmin) {
+      await loadRequests();
+      await loadCatalogProducts();
+    }
+
+    console.log("Brat Ltd. shop initialized.");
+
+  } catch (error) {
+    console.error("Shop initialization failed:", error);
+    showToast("The shop could not be initialized.", "error");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", initializeShop);
