@@ -3,10 +3,6 @@ const supabaseClient = window.supabase.createClient(
   window.SUPABASE_KEY
 );
 
-/* =========================================
-   GLOBAL STATE
-========================================= */
-
 let products = [];
 let category = "All";
 let cart = JSON.parse(localStorage.getItem("bratCart") || "{}");
@@ -21,66 +17,57 @@ let catalogCache = [];
    HELPERS
 ========================================= */
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+const escapeHTML = value =>
+  String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
     '"': "&quot;",
     "'": "&#039;"
   })[char]);
-}
 
-function roundMoney(value) {
-  return Math.ceil((Number(value) + Number.EPSILON) * 100) / 100;
-}
+const roundMoney = value =>
+  Math.ceil(Number(value || 0));
 
-function money(value) {
-  return new Intl.NumberFormat("en-US", {
+const money = value =>
+  `${Number(value || 0).toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
-  }).format(Number(value) || 0) + " KB$";
-}
+  })} KB$`;
 
-function checkoutMoney(value) {
-  return money(value);
-}
+const checkoutMoney = value =>
+  `${roundMoney(value).toLocaleString("en-US")} KB$`;
 
-function setText(id, value) {
+const setText = (id, value) => {
   const element = $(id);
   if (element) element.textContent = value;
-}
+};
 
-function formatDate(value) {
-  if (!value) return "—";
+const formatDate = value => {
+  if (!value) return "Not specified";
 
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
-    return "—";
+    return String(value);
   }
 
-  return date.toLocaleString("en-GB", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  });
-}
+  return date.toLocaleDateString("en-GB");
+};
 
-function safeExternalUrl(value) {
+const safeExternalUrl = value => {
   try {
     const url = new URL(value);
 
-    if (!["http:", "https:"].includes(url.protocol)) {
-      return "";
-    }
-
-    return url.href;
+    return ["http:", "https:"].includes(url.protocol)
+      ? url.href
+      : null;
   } catch {
-    return "";
+    return null;
   }
-}
+};
 
 /* =========================================
    MINECRAFT TEXTURES
@@ -109,124 +96,66 @@ const textureAliases = {
   "Ender Pearl": "ender_pearl"
 };
 
-function getTextureName(product) {
-  const name = String(product?.name || "").trim();
+function getTextureName(name) {
+  const alias = textureAliases[name];
 
-  if (textureAliases[name]) {
-    return textureAliases[name];
-  }
+  if (alias) return alias;
 
-  return name
+  return String(name || "")
     .toLowerCase()
-    .replace(/minecraft:/g, "")
-    .replace(/[^a-z0-9_ ]/g, "")
+    .replace(/[^a-z0-9 ]/g, "")
     .trim()
     .replace(/\s+/g, "_");
 }
 
 function productImage(product) {
-  const texture = getTextureName(product);
-  const categoryName = String(product?.category || "").toLowerCase();
+  const texture = getTextureName(product.name);
+  const isBlock = product.category === "Blocks";
+  const textureType = isBlock ? "block" : "item";
 
-  let folder = "item";
-
-  if (categoryName === "blocks") {
-    folder = "block";
-  }
-
-  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures/${folder}/${texture}.png`;
+  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures/${textureType}/${texture}.png`;
 }
 
 function imageMarkup(product, className = "product-image") {
-  const image = productImage(product);
-
   return `
     <img
-      class="${escapeHTML(className)}"
-      src="${escapeHTML(image)}"
-      alt="${escapeHTML(product?.name || "Minecraft item")}"
+      class="${className}"
+      src="${productImage(product)}"
+      alt="${escapeHTML(product.name)}"
       loading="lazy"
-      onerror="this.onerror=null;this.src='https://placehold.co/96x96/222222/eeeeee?text=MC';"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
     >
+    <div class="fallback-icon" style="display:none;">▦</div>
   `;
 }
 
 /* =========================================
-   PRICE AND DISCOUNTS
+   PRICES AND DISCOUNTS
 ========================================= */
 
-function getManualDiscount(product, quantity) {
-  const discounts = Array.isArray(product?.discounts)
-    ? product.discounts
-    : [];
-
-  let selectedDiscount = 0;
-
-  for (const discount of discounts) {
-    const minimum = Number(
-      discount.minimum_quantity ??
-      discount.min_quantity ??
-      discount.quantity ??
-      0
-    );
-
-    const percentage = Number(
-      discount.discount_percent ??
-      discount.percent ??
-      0
-    );
-
-    if (quantity >= minimum && minimum > 0) {
-      selectedDiscount = Math.max(selectedDiscount, percentage);
-    }
-  }
-
-  return selectedDiscount;
-}
-
-function getSalePrice(product, quantity = 1) {
-  const basePrice = Number(product?.price) || 0;
-
-  const productDiscount = Number(product?.discount_percent) || 0;
-  const manualDiscount = getManualDiscount(product, quantity);
-
-  const automaticDiscount =
-    quantity >= 16 ? 15 :
-    quantity >= 10 ? 10 :
-    quantity >= 6 ? 5 : 0;
-
-  const discount = Math.max(
-    productDiscount,
-    manualDiscount,
-    automaticDiscount
-  );
-
-  return roundMoney(
-    basePrice * (1 - Math.min(discount, 100) / 100)
-  );
-}
-
-function getDiscountPercent(product, quantity = 1) {
-  const basePrice = Number(product?.price) || 0;
-
-  if (basePrice <= 0) return 0;
-
-  const salePrice = getSalePrice(product, quantity);
-
+function getManualDiscount(product) {
   return Math.max(
     0,
-    Math.round((1 - salePrice / basePrice) * 100)
+    Math.min(90, Number(product.discount_percent || 0))
   );
 }
 
-function stackText(size) {
-  const amount = Number(size) || 64;
+function getSalePrice(product) {
+  return Number(product.price || 0) *
+    (1 - getManualDiscount(product) / 100);
+}
 
-  if (amount === 1) return "1 per purchase";
-  if (amount === 16) return "16 per stack";
-  if (amount === 64) return "64 per stack";
+function getDiscountPercent(quantity) {
+  if (quantity >= 16) return 15;
+  if (quantity >= 10) return 10;
+  if (quantity >= 6) return 5;
 
-  return `${amount} per stack`;
+  return 0;
+}
+
+function stackText(product) {
+  const size = Number(product.stack_size || 64);
+  return `${size} items per stack`;
 }
 
 /* =========================================
@@ -234,39 +163,56 @@ function stackText(size) {
 ========================================= */
 
 function getCartTotals() {
-  let subtotal = 0;
-  let totalItems = 0;
-  let discountTotal = 0;
+  let original = 0;
+  let afterManual = 0;
+  let afterQuantity = 0;
+  let serviceTotal = 0;
 
-  const entries = Object.entries(cart);
-
-  for (const [productId, item] of entries) {
+  for (const [id, quantity] of Object.entries(cart)) {
     const product = products.find(
-      (entry) => String(entry.id) === String(productId)
+      item => String(item.id) === String(id)
     );
 
     if (!product) continue;
 
-    const quantity = Math.max(1, Number(item.quantity) || 1);
-    const price = Number(product.price) || 0;
-    const salePrice = getSalePrice(product, quantity);
+    if (product.isService) {
+      const budget = Number(product.desiredPrice || 0);
 
-    const lineSubtotal = price * quantity;
-    const lineTotal = salePrice * quantity;
+      original += budget;
+      afterManual += budget;
+      afterQuantity += budget;
+      serviceTotal += budget;
 
-    subtotal += lineSubtotal;
-    discountTotal += lineSubtotal - lineTotal;
-    totalItems += quantity;
+      continue;
+    }
+
+    const stacks = Number(quantity);
+    const stackPrice = Number(product.price || 0);
+    const salePrice = getSalePrice(product);
+    const quantityDiscount = getDiscountPercent(stacks);
+
+    original += stackPrice * stacks;
+    afterManual += salePrice * stacks;
+
+    afterQuantity +=
+      salePrice * stacks *
+      (1 - quantityDiscount / 100);
   }
 
-  subtotal = roundMoney(subtotal);
-  discountTotal = roundMoney(discountTotal);
+  const manualSavings = original - afterManual;
+  const quantitySavings = afterManual - afterQuantity;
+  const savings = manualSavings + quantitySavings;
 
   return {
-    subtotal,
-    discountTotal,
-    total: roundMoney(subtotal - discountTotal),
-    totalItems
+    original,
+    afterManual,
+    afterQuantity,
+    manualSavings,
+    quantitySavings,
+    savings,
+    serviceTotal,
+    total: afterQuantity,
+    checkoutTotal: roundMoney(afterQuantity)
   };
 }
 
@@ -275,93 +221,126 @@ function getCartTotals() {
 ========================================= */
 
 async function loadProducts() {
-  try {
-    const { data, error } = await supabaseClient
-      .from("products")
-      .select("*")
-      .eq("is_active", true)
-      .order("name", { ascending: true });
+  const { data, error } = await supabaseClient
+    .from("products")
+    .select("*")
+    .eq("is_active", true)
+    .order("name");
 
-    if (error) throw error;
+  if (error) {
+    console.error("Product loading error:", error);
 
-    products = data || [];
-
-    renderOffers();
-    renderProducts();
-    renderCart();
-  } catch (error) {
-    console.error("Could not load products:", error);
-
-    const container = $("products-grid");
-
-    if (container) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <h3>Products could not be loaded</h3>
-          <p>Please try again later.</p>
-        </div>
+    if ($("products")) {
+      $("products").innerHTML = `
+        <p class="error-message">
+          Could not load products: ${escapeHTML(error.message)}
+        </p>
       `;
     }
+
+    if ($("offers-grid")) {
+      $("offers-grid").innerHTML = `
+        <p class="error-message">Could not load offers.</p>
+      `;
+    }
+
+    return;
   }
+
+  const serviceProducts = products.filter(
+    product => product.isService
+  );
+
+  products = [
+    ...(data || []),
+    ...serviceProducts
+  ];
+
+  renderOffers();
+  renderProducts();
+  renderCart();
 }
 
 /* =========================================
    NAVIGATION
 ========================================= */
 
-function showCategory(selectedCategory) {
-  category = selectedCategory;
+function showCategory(nextCategory) {
+  const validCategories = [
+    "All",
+    "Blocks",
+    "Items",
+    "Armor & Weapons",
+    "Enchantments",
+    "Services"
+  ];
 
-  document.querySelectorAll(".nav-link").forEach((link) => {
+  if (!validCategories.includes(nextCategory)) {
+    nextCategory = "All";
+  }
+
+  category = nextCategory;
+
+  document.querySelectorAll(".nav-link").forEach(link => {
     link.classList.toggle(
       "active",
-      link.dataset.category === selectedCategory
+      link.dataset.category === nextCategory
     );
   });
 
-  const offersSection = $("offers-section");
-  const shopSection = $("shop-section");
-  const adminSection = $("admin-section");
+  const requestsTab = document.querySelector(
+    "[data-requests-tab]"
+  );
 
-  if (adminSection) {
-    adminSection.style.display = "none";
+  if (requestsTab) {
+    requestsTab.classList.remove("active");
   }
 
-  if (selectedCategory === "All") {
-    if (offersSection) offersSection.style.display = "";
-    if (shopSection) shopSection.style.display = "none";
-  } else {
-    if (offersSection) offersSection.style.display = "none";
-    if (shopSection) shopSection.style.display = "";
+  if ($("offers")) {
+    $("offers").style.display =
+      nextCategory === "All" ? "" : "none";
   }
+
+  if ($("shop")) {
+    $("shop").style.display =
+      nextCategory === "All" ? "none" : "";
+  }
+
+  if ($("admin-section")) {
+    $("admin-section").hidden = true;
+    $("admin-section").style.display = "none";
+  }
+
+  const descriptions = {
+    "Blocks": "Building materials and decorative blocks.",
+    "Items": "Useful items and resources.",
+    "Armor & Weapons": "Equipment for your adventures.",
+    "Enchantments": "Enchantments and upgrades.",
+    "Services": "Services and custom requests."
+  };
+
+  setText("category-title", nextCategory);
+
+  setText(
+    "category-description",
+    descriptions[nextCategory] ||
+      "Browse available products."
+  );
 
   renderProducts();
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
 }
 
-document.querySelectorAll(".nav-link").forEach((link) => {
-  link.addEventListener("click", (event) => {
+document.querySelectorAll(".nav-link").forEach(link => {
+  link.addEventListener("click", event => {
     event.preventDefault();
-
-    const selectedCategory = link.dataset.category;
-
-    if (selectedCategory) {
-      showCategory(selectedCategory);
-    }
+    showCategory(link.dataset.category);
   });
 });
-
-/* =========================================
-   CATEGORY DESCRIPTIONS
-========================================= */
-
-const categoryDescriptions = {
-  "All": "Discover the latest offers from Brat Ltd.",
-  "Blocks": "Building blocks and materials for your next project.",
-  "Items": "Useful items and resources for your Minecraft adventure.",
-  "Armor & Weapons": "Equipment to protect yourself and defeat your enemies.",
-  "Enchantments": "Enchantments and upgrades for your equipment.",
-  "Services": "Request custom services from Brat Ltd."
-};
 
 /* =========================================
    OFFERS
@@ -372,59 +351,86 @@ function renderOffers() {
 
   if (!container) return;
 
-  const offers = products.filter((product) => {
-    return Number(product.discount_percent) > 0;
+  const search = (
+    $("search")?.value || ""
+  ).toLowerCase();
+
+  const offers = products.filter(product => {
+    if (product.isService) return false;
+
+    const hasDiscount =
+      Number(product.discount_percent || 0) > 0;
+
+    const matchesSearch =
+      String(product.name || "").toLowerCase().includes(search) ||
+      String(product.description || "").toLowerCase().includes(search);
+
+    return hasDiscount && matchesSearch;
   });
 
   if (!offers.length) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <h3>No special offers right now</h3>
-        <p>Check back later for new deals.</p>
-      </div>
-    `;
+    container.innerHTML = "";
+
+    if ($("empty-offers")) {
+      $("empty-offers").style.display = "";
+    }
 
     return;
   }
 
-  container.innerHTML = offers.map((product) => {
-    const oldPrice = Number(product.price) || 0;
-    const newPrice = getSalePrice(product, 1);
-    const discount = getDiscountPercent(product, 1);
+  if ($("empty-offers")) {
+    $("empty-offers").style.display = "none";
+  }
+
+  container.innerHTML = offers.map(product => {
+    const oldPrice = Number(product.price || 0);
+    const newPrice = getSalePrice(product);
 
     return `
-      <article class="product-card offer-card">
-        <div class="product-card-image">
-          ${imageMarkup(product)}
-          <span class="discount-badge">-${discount}%</span>
+      <article class="offer-card">
+        <div class="offer-image">
+          <span class="offer-badge">
+            -${getManualDiscount(product)}%
+          </span>
+
+          ${imageMarkup(product, "offer-product-image")}
         </div>
 
-        <div class="product-card-content">
-          <span class="product-category">
-            ${escapeHTML(product.category || "Items")}
-          </span>
+        <div class="offer-copy">
+          <div class="offer-kicker">
+            ${escapeHTML(product.category)}
+          </div>
 
           <h3>${escapeHTML(product.name)}</h3>
 
-          <p class="product-description">
-            ${escapeHTML(product.description || "")}
+          <p>
+            ${escapeHTML(
+              product.description || "Available now at Brat Ltd."
+            )}
           </p>
 
-          <div class="product-price">
+          <div class="offer-prices">
             <span class="old-price">${money(oldPrice)}</span>
-            <strong>${money(newPrice)}</strong>
+            <span class="offer-price">${money(newPrice)}</span>
           </div>
 
           <button
-            class="primary-button"
-            onclick="addToCart('${escapeHTML(product.id)}')"
+            class="primary-button offer-add-button"
+            data-add="${escapeHTML(product.id)}"
+            type="button"
           >
-            Add to cart
+            Add to cart →
           </button>
         </div>
       </article>
     `;
   }).join("");
+
+  container.querySelectorAll("[data-add]").forEach(button => {
+    button.addEventListener("click", () => {
+      addToCart(button.dataset.add);
+    });
+  });
 }
 
 /* =========================================
@@ -432,25 +438,24 @@ function renderOffers() {
 ========================================= */
 
 function productPriceMarkup(product) {
-  const price = Number(product.price) || 0;
-  const discountedPrice = getSalePrice(product, 1);
-  const discount = getDiscountPercent(product, 1);
+  const price = Number(product.price || 0);
+  const discount = getManualDiscount(product);
 
   if (discount > 0) {
     return `
-      <div class="product-price">
-        <span class="old-price">${money(price)}</span>
-        <strong>${money(discountedPrice)}</strong>
-        <span class="discount-label">-${discount}%</span>
-      </div>
+      <span class="old-price">${money(price)}</span>
+
+      <span class="price">
+        ${money(getSalePrice(product))}
+      </span>
+
+      <span class="product-discount-badge">
+        -${discount}%
+      </span>
     `;
   }
 
-  return `
-    <div class="product-price">
-      <strong>${money(price)}</strong>
-    </div>
-  `;
+  return `<span class="price">${money(price)}</span>`;
 }
 
 function adminProductButton(product) {
@@ -458,122 +463,123 @@ function adminProductButton(product) {
 
   return `
     <button
-      class="secondary-button"
-      onclick="openProductEditor('${escapeHTML(product.id)}')"
+      class="product-admin-menu"
+      data-edit-product="${escapeHTML(product.id)}"
+      type="button"
     >
-      Edit product
+      ✎ Edit
     </button>
   `;
 }
 
 function renderProducts() {
-  const container = $("products-grid");
+  const container = $("products");
 
   if (!container) return;
 
-  const description = $("category-description");
+  if (category === "Services") {
+    if ($("empty-products")) {
+      $("empty-products").style.display = "none";
+    }
 
-  if (description) {
-    description.textContent =
-      categoryDescriptions[category] || "";
+    renderServiceForm();
+    return;
   }
 
-  if (category === "Services") {
-    container.innerHTML = `
-      <div class="service-placeholder">
-        <h3>Custom Services</h3>
-        <p>Choose a service and send us your request.</p>
-      </div>
-    `;
+  const search = (
+    $("search")?.value || ""
+  ).toLowerCase();
 
-    if (typeof renderServiceForm === "function") {
-      renderServiceForm();
+  const filtered = products.filter(product => {
+    if (product.isService) return false;
+
+    const matchesCategory =
+      product.category === category;
+
+    const matchesSearch =
+      String(product.name || "").toLowerCase().includes(search) ||
+      String(product.description || "").toLowerCase().includes(search);
+
+    return matchesCategory && matchesSearch;
+  });
+
+  if (!filtered.length) {
+    container.innerHTML = "";
+
+    if ($("empty-products")) {
+      $("empty-products").style.display = "";
     }
 
     return;
   }
 
-  let filteredProducts = products;
-
-  if (category !== "All") {
-    filteredProducts = products.filter((product) => {
-      return product.category === category;
-    });
+  if ($("empty-products")) {
+    $("empty-products").style.display = "none";
   }
 
-  const searchInput = $("product-search");
-  const searchTerm = searchInput
-    ? searchInput.value.trim().toLowerCase()
-    : "";
-
-  if (searchTerm) {
-    filteredProducts = filteredProducts.filter((product) => {
-      return (
-        String(product.name || "").toLowerCase().includes(searchTerm) ||
-        String(product.description || "").toLowerCase().includes(searchTerm)
-      );
-    });
-  }
-
-  if (!filteredProducts.length) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <h3>No products found</h3>
-        <p>Try another category or search term.</p>
+  container.innerHTML = filtered.map(product => `
+    <article class="product-card">
+      <div class="product-visual">
+        ${imageMarkup(product)}
+        ${adminProductButton(product)}
       </div>
-    `;
 
-    return;
-  }
-
-  container.innerHTML = filteredProducts.map((product) => {
-    return `
-      <article class="product-card">
-        <div class="product-card-image">
-          ${imageMarkup(product)}
+      <div class="product-info">
+        <div class="product-tag">
+          ${escapeHTML(product.category)}
         </div>
 
-        <div class="product-card-content">
-          <span class="product-category">
-            ${escapeHTML(product.category || "Items")}
-          </span>
+        <h3>${escapeHTML(product.name)}</h3>
 
-          <h3>${escapeHTML(product.name)}</h3>
+        <p class="product-description">
+          ${escapeHTML(product.description || "")}
+        </p>
 
-          <p class="product-description">
-            ${escapeHTML(product.description || "")}
-          </p>
-
+        <div class="price-row">
           ${productPriceMarkup(product)}
-
-          <p class="stack-info">
-            ${stackText(product.stack_size)}
-          </p>
-
-          <div class="product-card-actions">
-            <button
-              class="primary-button"
-              onclick="addToCart('${escapeHTML(product.id)}')"
-            >
-              Add to cart
-            </button>
-
-            ${adminProductButton(product)}
-          </div>
         </div>
-      </article>
-    `;
-  }).join("");
+
+        <div class="stack-info">
+          ${stackText(product)}
+        </div>
+
+        <button
+          class="primary-button add-button"
+          data-add="${escapeHTML(product.id)}"
+          type="button"
+        >
+          Add to cart
+        </button>
+      </div>
+    </article>
+  `).join("");
+
+  container.querySelectorAll("[data-add]").forEach(button => {
+    button.addEventListener("click", () => {
+      addToCart(button.dataset.add);
+    });
+  });
+
+  container.querySelectorAll("[data-edit-product]").forEach(button => {
+    button.addEventListener("click", () => {
+      const product = products.find(item =>
+        String(item.id) === String(button.dataset.editProduct)
+      );
+
+      if (product) {
+        openProductEditor(product);
+      }
+    });
+  });
 }
 
 /* =========================================
-   PRODUCT SEARCH
+   SEARCH
 ========================================= */
 
-const productSearchInput = $("product-search");
-
-if (productSearchInput) {
-  productSearchInput.addEventListener("input", () => {
+if ($("search")) {
+  $("search").addEventListener("input", () => {
+    renderOffers();
     renderProducts();
   });
 }
@@ -582,151 +588,1033 @@ if (productSearchInput) {
    PRODUCT EDITOR
 ========================================= */
 
-function openProductEditor(productId) {
+function openProductEditor(productOrId) {
   if (!isAdmin) return;
 
-  const product = products.find(
-    (entry) => String(entry.id) === String(productId)
-  );
+  const product = typeof productOrId === "object"
+    ? productOrId
+    : products.find(item =>
+        String(item.id) === String(productOrId)
+      ) || catalogCache.find(item =>
+        String(item.id) === String(productOrId)
+      );
 
-  if (!product) return;
+  if (!product) {
+    showToast("Product not found.", "error");
+    return;
+  }
 
   editingProductId = product.id;
 
-  const modal = $("product-editor-modal");
+  const existing = $("product-editor-modal");
 
-  if (!modal) return;
+  if (existing) existing.remove();
 
-  const nameInput = $("edit-product-name");
-  const categoryInput = $("edit-product-category");
-  const priceInput = $("edit-product-price");
-  const stackInput = $("edit-product-stack");
-  const discountInput = $("edit-product-discount");
-  const activeInput = $("edit-product-active");
+  const modal = document.createElement("div");
 
-  if (nameInput) nameInput.value = product.name || "";
+  modal.id = "product-editor-modal";
+  modal.className = "modal-backdrop show";
 
-  if (categoryInput) {
-    categoryInput.value = product.category || "Items";
-  }
-
-  if (priceInput) {
-    priceInput.value = Number(product.price) || 0;
-  }
-
-  if (stackInput) {
-    stackInput.value = Number(product.stack_size) || 64;
-  }
-
-  if (discountInput) {
-    discountInput.value = Number(product.discount_percent) || 0;
-  }
-
-  if (activeInput) {
-    activeInput.checked = Boolean(product.is_active);
-  }
-
-  modal.classList.add("active");
-}
-
-function closeProductEditor() {
-  const modal = $("product-editor-modal");
-
-  if (modal) {
-    modal.classList.remove("active");
-  }
-
-  editingProductId = null;
-}
-
-async function saveProductEditor() {
-  if (!isAdmin || !editingProductId) return;
-
-  const name = $("edit-product-name")?.value.trim();
-  const categoryValue = $("edit-product-category")?.value;
-  const price = Number($("edit-product-price")?.value);
-  const stackSize = Number($("edit-product-stack")?.value);
-  const discount = Number($("edit-product-discount")?.value);
-  const isActive = $("edit-product-active")?.checked ?? false;
-
-  if (!name) {
-    showToast("Product name is required.", "error");
-    return;
-  }
-
-  if (
-    !Number.isFinite(price) ||
-    price < 0 ||
-    !Number.isFinite(stackSize) ||
-    stackSize < 1 ||
-    stackSize > 64 ||
-    !Number.isFinite(discount) ||
-    discount < 0 ||
-    discount > 100
-  ) {
-    showToast("Please enter valid product values.", "error");
-    return;
-  }
-
-  const allowedCategories = [
+  const categories = [
     "Blocks",
     "Items",
     "Armor & Weapons",
     "Enchantments"
   ];
 
-  if (!allowedCategories.includes(categoryValue)) {
-    showToast("Please select a valid category.", "error");
-    return;
-  }
+  modal.innerHTML = `
+    <div class="modal product-editor-modal">
+      <button
+        class="modal-close"
+        id="close-product-editor"
+        type="button"
+      >×</button>
 
-  const { error } = await supabaseClient
-    .from("products")
-    .update({
-      category: categoryValue,
-      price: roundMoney(price),
-      stack_size: stackSize,
-      discount_percent: discount,
-      is_active: isActive
-    })
-    .eq("id", editingProductId);
+      <div class="modal-eyebrow">PRODUCT MANAGEMENT</div>
 
-  if (error) {
-    console.error(error);
-    showToast("Could not save product.", "error");
-    return;
-  }
+      <h2>
+        Edit <span class="orange">product.</span>
+      </h2>
 
-  closeProductEditor();
-  await loadProducts();
-  await loadCatalogProducts();
+      <form id="product-editor-form">
+        <label>Product name</label>
 
-  showToast("Product updated successfully.", "success");
+        <input
+          value="${escapeHTML(product.name)}"
+          disabled
+        >
+
+        <label>Category</label>
+
+        <select id="edit-product-category">
+          ${categories.map(item => `
+            <option
+              value="${item}"
+              ${product.category === item ? "selected" : ""}
+            >${item}</option>
+          `).join("")}
+        </select>
+
+        <label>
+          Price per stack (${Number(product.stack_size || 64)} items)
+        </label>
+
+        <input
+          id="edit-product-price"
+          type="number"
+          min="0"
+          step="0.01"
+          value="${Number(product.price || 0)}"
+          required
+        >
+
+        <label>Stack size (1–64)</label>
+
+        <input
+          id="edit-product-stack"
+          type="number"
+          min="1"
+          max="64"
+          step="1"
+          value="${Number(product.stack_size || 64)}"
+          required
+        >
+
+        <label>Manual discount (%)</label>
+
+        <input
+          id="edit-product-discount"
+          type="number"
+          min="0"
+          max="90"
+          step="1"
+          value="${getManualDiscount(product)}"
+          required
+        >
+
+        <label class="catalog-active-toggle">
+          <input
+            id="edit-product-active"
+            type="checkbox"
+            ${product.is_active ? "checked" : ""}
+          >
+          Active in public shop
+        </label>
+
+        <button
+          class="primary-button full-width"
+          type="submit"
+        >
+          Save changes
+        </button>
+
+        <p id="product-editor-message" class="form-message"></p>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  $("close-product-editor").addEventListener("click", () => {
+    modal.remove();
+  });
+
+  modal.addEventListener("click", event => {
+    if (event.target === modal) {
+      modal.remove();
+    }
+  });
+
+  $("product-editor-form").addEventListener(
+    "submit",
+    async event => {
+      event.preventDefault();
+
+      const price = Number($("edit-product-price").value);
+      const discount = Number($("edit-product-discount").value);
+      const stackSize = Number($("edit-product-stack").value);
+
+      if (
+        !Number.isFinite(price) ||
+        price < 0 ||
+        !Number.isInteger(discount) ||
+        discount < 0 ||
+        discount > 90 ||
+        !Number.isInteger(stackSize) ||
+        stackSize < 1 ||
+        stackSize > 64
+      ) {
+        setText(
+          "product-editor-message",
+          "Please enter valid values."
+        );
+        return;
+      }
+
+      const saveButton = $("product-editor-form")
+        .querySelector('button[type="submit"]');
+
+      saveButton.disabled = true;
+      saveButton.textContent = "Saving...";
+
+      const { error } = await supabaseClient
+        .from("products")
+        .update({
+          price,
+          discount_percent: discount,
+          stack_size: stackSize,
+          category: $("edit-product-category").value,
+          is_active: $("edit-product-active").checked
+        })
+        .eq("id", editingProductId);
+
+      if (error) {
+        setText("product-editor-message", error.message);
+        saveButton.disabled = false;
+        saveButton.textContent = "Save changes";
+        return;
+      }
+
+      modal.remove();
+
+      showToast("Product updated successfully.");
+
+      await loadProducts();
+
+      if (isAdmin) {
+        await loadCatalogProducts();
+      }
+    }
+  );
 }
+
+/* =========================================
+   CART STORAGE
+========================================= */
+
+function saveCart() {
+  localStorage.setItem("bratCart", JSON.stringify(cart));
+}
+
+function addToCart(id) {
+  const product = products.find(
+    item => String(item.id) === String(id)
+  );
+
+  if (!product || product.isService) return;
+
+  cart[id] = Number(cart[id] || 0) + 1;
+
+  saveCart();
+  renderCart();
+  openCart();
+
+  showToast(`${product.name} added to cart.`);
+}
+
+function changeQuantity(id, change) {
+  const next = Number(cart[id] || 0) + change;
+
+  if (next <= 0) {
+    delete cart[id];
+  } else {
+    cart[id] = next;
+  }
+
+  saveCart();
+  renderCart();
+}
+
+/* =========================================
+   CART DISPLAY
+========================================= */
+
+function renderCart() {
+  const container = $("cart-items");
+
+  if (!container) return;
+
+  const entries = Object.entries(cart).filter(([id, quantity]) =>
+    Number(quantity) > 0 &&
+    products.some(item =>
+      String(item.id) === String(id)
+    )
+  );
+
+  const count = entries.reduce(
+    (sum, [, quantity]) => sum + Number(quantity),
+    0
+  );
+
+  setText("cart-count", count);
+
+  if (!entries.length) {
+    container.innerHTML = `
+      <div class="empty-cart">
+        <div class="empty-icon">🛒</div>
+        <p>Your cart is empty.</p>
+      </div>
+    `;
+
+    if ($("cart-total")) {
+      $("cart-total").innerHTML = `
+        <div class="total-line grand-total">
+          <span>Total</span>
+          <strong>0 KB$</strong>
+        </div>
+      `;
+    }
+
+    return;
+  }
+
+  container.innerHTML = entries.map(([id, quantity]) => {
+    const product = products.find(
+      item => String(item.id) === String(id)
+    );
+
+    if (!product) return "";
+
+    const stacks = Number(quantity);
+    const discount = getDiscountPercent(stacks);
+    const manualDiscount = getManualDiscount(product);
+
+    const finalPrice =
+      getSalePrice(product) *
+      stacks *
+      (1 - discount / 100);
+
+    return `
+      <div class="cart-item">
+        <div class="cart-item-image">
+          ${imageMarkup(product, "cart-product-image")}
+        </div>
+
+        <div class="cart-item-details">
+          <h3>${escapeHTML(product.name)}</h3>
+
+          <div class="cart-item-price">
+            ${money(finalPrice)}
+          </div>
+
+          ${manualDiscount > 0 ? `
+            <div class="discount-note">
+              Product discount: ${manualDiscount}%
+            </div>
+          ` : ""}
+
+          ${discount > 0 ? `
+            <div class="discount-note">
+              Quantity discount: ${discount}%
+            </div>
+          ` : ""}
+
+          <div class="quantity-controls">
+            <button
+              data-quantity="${escapeHTML(id)}"
+              data-change="-1"
+              type="button"
+              aria-label="Decrease quantity"
+            >−</button>
+
+            <span>${stacks}</span>
+
+            <button
+              data-quantity="${escapeHTML(id)}"
+              data-change="1"
+              type="button"
+              aria-label="Increase quantity"
+            >+</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  container.querySelectorAll("[data-quantity]").forEach(button => {
+    button.addEventListener("click", () => {
+      changeQuantity(
+        button.dataset.quantity,
+        Number(button.dataset.change)
+      );
+    });
+  });
+
+  const totals = getCartTotals();
+
+  if ($("cart-total")) {
+    $("cart-total").innerHTML = `
+      <div class="total-line">
+        <span>Subtotal</span>
+        <span>${money(totals.original)}</span>
+      </div>
+
+      ${totals.manualSavings > 0 ? `
+        <div class="total-line discount-line">
+          <span>Product discounts</span>
+          <span>-${money(totals.manualSavings)}</span>
+        </div>
+      ` : ""}
+
+      ${totals.quantitySavings > 0 ? `
+        <div class="total-line discount-line">
+          <span>Quantity discounts</span>
+          <span>-${money(totals.quantitySavings)}</span>
+        </div>
+      ` : ""}
+
+      <div class="total-line grand-total">
+        <span>Total</span>
+        <strong>${checkoutMoney(totals.total)}</strong>
+      </div>
+    `;
+  }
+}
+
+/* =========================================
+   CART OPEN / CLOSE
+========================================= */
+
+function openCart() {
+  const panel = $("cart-panel");
+  const overlay = $("cart-overlay");
+
+  if (panel) panel.classList.add("active");
+  if (overlay) overlay.classList.add("active");
+
+  document.body.style.overflow = "hidden";
+}
+
+function closeCart() {
+  const panel = $("cart-panel");
+  const overlay = $("cart-overlay");
+
+  if (panel) panel.classList.remove("active");
+  if (overlay) overlay.classList.remove("active");
+
+  document.body.style.overflow = "";
+}
+
+if ($("cart-button")) {
+  $("cart-button").addEventListener("click", openCart);
+}
+
+if ($("cart-close")) {
+  $("cart-close").addEventListener("click", closeCart);
+}
+
+if ($("cart-overlay")) {
+  $("cart-overlay").addEventListener("click", closeCart);
+}
+
+/* =========================================
+   CHECKOUT MODAL
+========================================= */
+
+function openCheckout() {
+  const entries = Object.entries(cart).filter(([id, quantity]) =>
+    Number(quantity) > 0 &&
+    products.some(product =>
+      String(product.id) === String(id)
+    )
+  );
+
+  if (!entries.length) {
+    showToast("Your cart is empty.", "error");
+    return;
+  }
+
+  if (!currentSession) {
+    showToast("Please log in before checkout.", "error");
+    closeCart();
+    openLogin();
+    return;
+  }
+
+  const modal = $("checkout-modal");
+
+  if (!modal) {
+    showToast("Checkout is currently unavailable.", "error");
+    return;
+  }
+
+  const totals = getCartTotals();
+
+  const totalStacks = entries.reduce(
+    (sum, [, quantity]) => sum + Number(quantity),
+    0
+  );
+
+  if ($("checkout-summary")) {
+    $("checkout-summary").innerHTML = `
+      <div class="checkout-summary-row">
+        <span>Stacks in cart</span>
+        <strong>${totalStacks}</strong>
+      </div>
+
+      <div class="checkout-summary-row">
+        <span>Subtotal</span>
+        <strong>${money(totals.original)}</strong>
+      </div>
+
+      <div class="checkout-summary-row">
+        <span>Discounts</span>
+        <strong>-${money(totals.savings)}</strong>
+      </div>
+
+      <div class="checkout-summary-row checkout-summary-total">
+        <span>Total</span>
+        <strong>${checkoutMoney(totals.total)}</strong>
+      </div>
+    `;
+  }
+
+  closeCart();
+
+  modal.classList.add("active");
+  document.body.style.overflow = "hidden";
+}
+
+function closeCheckout() {
+  const modal = $("checkout-modal");
+
+  if (modal) {
+    modal.classList.remove("active");
+  }
+
+  document.body.style.overflow = "";
+}
+
+if ($("checkout-button")) {
+  $("checkout-button").addEventListener("click", openCheckout);
+}
+
+if ($("checkout-close")) {
+  $("checkout-close").addEventListener("click", closeCheckout);
+}
+
+if ($("checkout-modal")) {
+  $("checkout-modal").addEventListener("click", event => {
+    if (event.target === $("checkout-modal")) {
+      closeCheckout();
+    }
+  });
+}
+
+/* =========================================
+   CHECKOUT FORM
+========================================= */
+
+function getCheckoutValues() {
+  return {
+    minecraftName:
+      $("checkout-minecraft-name")?.value.trim() || "",
+
+    district:
+      $("checkout-district")?.value.trim() || "",
+
+    address:
+      $("checkout-address")?.value.trim() || "",
+
+    note:
+      $("checkout-note")?.value.trim() || ""
+  };
+}
+
+function validateCheckout(values) {
+  if (!values.minecraftName) {
+    return "Please enter your Minecraft username.";
+  }
+
+  if (!values.district) {
+    return "Please select your delivery district.";
+  }
+
+  if (!values.address) {
+    return "Please enter your delivery address.";
+  }
+
+  return null;
+}
+
+/* =========================================
+   ORDER ITEM PREPARATION
+========================================= */
+
+function buildOrderItems() {
+  return Object.entries(cart)
+    .filter(([id, quantity]) => Number(quantity) > 0)
+    .map(([id, quantity]) => {
+      const product = products.find(
+        item => String(item.id) === String(id)
+      );
+
+      if (!product || product.isService) {
+        return null;
+      }
+
+      const stacks = Number(quantity);
+      const stackPrice = Number(product.price || 0);
+      const manualDiscount = getManualDiscount(product);
+      const quantityDiscount = getDiscountPercent(stacks);
+
+      const priceAfterManual =
+        stackPrice * (1 - manualDiscount / 100);
+
+      const finalPrice =
+        priceAfterManual *
+        stacks *
+        (1 - quantityDiscount / 100);
+
+      return {
+        id: product.id,
+        name: product.name,
+        type: "product",
+        category: product.category,
+        quantity: stacks,
+        stack_size: Number(product.stack_size || 64),
+        price_per_stack: stackPrice,
+        manual_discount: manualDiscount,
+        quantity_discount: quantityDiscount,
+        total: Number(finalPrice.toFixed(2))
+      };
+    })
+    .filter(Boolean);
+}
+
+/* =========================================
+   TOAST NOTIFICATIONS
+========================================= */
+
+function showToast(message, type = "success") {
+  let container = $("toast-container");
+
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toast-container";
+    container.className = "toast-container";
+
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+
+  container.appendChild(toast);
+
+  window.setTimeout(() => {
+    toast.remove();
+
+    if (!container.children.length) {
+      container.remove();
+    }
+  }, 3500);
+}
+
+/* =========================================
+   PLACE PRODUCT ORDER
+========================================= */
+
+async function placeOrder(event) {
+  event.preventDefault();
+
+  if (!currentSession) {
+    showToast("Please log in before placing an order.", "error");
+    closeCheckout();
+    openLogin();
+    return;
+  }
+
+  const values = getCheckoutValues();
+  const validationError = validateCheckout(values);
+
+  if (validationError) {
+    showToast(validationError, "error");
+    return;
+  }
+
+  const orderItems = buildOrderItems();
+
+  if (!orderItems.length) {
+    showToast("Your cart is empty.", "error");
+    return;
+  }
+
+  const totals = getCartTotals();
+  const button = $("place-order-button");
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Processing...";
+  }
+
+  const orderData = {
+    request_type: "product",
+    items: orderItems,
+    description: "",
+    links: [],
+    image_urls: [],
+    desired_price: null,
+    subtotal: totals.original,
+    discount_amount: totals.savings,
+    total: totals.checkoutTotal,
+    status: "pending",
+    minecraft_name: values.minecraftName,
+    note: values.note,
+    user_id: currentSession.user.id,
+    delivery_district: values.district,
+    delivery_address: values.address
+  };
+
+  try {
+    const { error } = await supabaseClient
+      .from("orders")
+      .insert(orderData);
+
+    if (error) throw error;
+
+    cart = {};
+    saveCart();
+    renderCart();
+
+    closeCheckout();
+
+    if ($("checkout-form")) {
+      $("checkout-form").reset();
+    }
+
+    showToast("Your order has been submitted successfully.");
+
+  } catch (error) {
+    console.error("Order error:", error);
+
+    showToast(
+      `Could not place order: ${error.message}`,
+      "error"
+    );
+
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Place order";
+    }
+  }
+}
+
+if ($("checkout-form")) {
+  $("checkout-form").addEventListener("submit", placeOrder);
+}
+
+/* =========================================
+   SERVICE REQUEST FORM
+========================================= */
+
+function renderServiceForm() {
+  const container = $("products");
+
+  if (!container) return;
+
+  if ($("service-request-form")) return;
+
+  container.innerHTML = `
+    <div
+      class="service-request-card"
+      id="service-request-form"
+    >
+      <div class="eyebrow">BRAT LTD. SERVICES</div>
+
+      <h2>
+        Request a <span class="orange">custom service.</span>
+      </h2>
+
+      <p>
+        Tell us what you need. Our team will review your request
+        and get back to you.
+      </p>
+
+      <form id="service-form">
+        <label for="service-title">Service title</label>
+
+        <input
+          id="service-title"
+          type="text"
+          maxlength="100"
+          placeholder="e.g. Custom building project"
+          required
+        >
+
+        <label for="service-player">Minecraft username</label>
+
+        <input
+          id="service-player"
+          type="text"
+          maxlength="32"
+          placeholder="Your Minecraft username"
+          required
+        >
+
+        <label for="service-description">Description</label>
+
+        <textarea
+          id="service-description"
+          maxlength="3000"
+          placeholder="Describe your project and requirements..."
+          required
+        ></textarea>
+
+        <div class="form-row">
+          <div>
+            <label for="service-budget">Budget (KB$)</label>
+
+            <input
+              id="service-budget"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Optional"
+            >
+          </div>
+
+          <div>
+            <label for="service-deadline">Desired deadline</label>
+
+            <input
+              id="service-deadline"
+              type="date"
+              min="${new Date().toISOString().split("T")[0]}"
+            >
+          </div>
+        </div>
+
+        <label for="service-links">Reference links</label>
+
+        <textarea
+          id="service-links"
+          maxlength="1500"
+          placeholder="Add one link per line..."
+        ></textarea>
+
+        <label for="service-images">Reference images</label>
+
+        <input
+          id="service-images"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          multiple
+        >
+
+        <p class="form-hint">
+          You can upload up to 5 images. Maximum 5 MB per image.
+        </p>
+
+        <button
+          class="primary-button full-width"
+          type="submit"
+        >
+          Submit service request
+        </button>
+
+        <p id="service-message" class="form-message"></p>
+      </form>
+    </div>
+  `;
+
+  $("service-form").addEventListener(
+    "submit",
+    submitServiceRequest
+  );
+}
+
+/* =========================================
+   SERVICE IMAGE UPLOAD
+========================================= */
+
+async function uploadServiceImages(files) {
+  const uploadedUrls = [];
+  const selectedFiles = Array.from(files || []);
+
+  if (selectedFiles.length > 5) {
+    throw new Error("You can upload a maximum of 5 images.");
+  }
+
+  for (const file of selectedFiles) {
+    const allowedTypes = [
+      "image/png",
+      "image/jpeg",
+      "image/webp"
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error("Only PNG, JPG and WEBP images are allowed.");
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      throw new Error("Each image must be smaller than 5 MB.");
+    }
+
+    const extension = file.name.split(".").pop() || "png";
+
+    const fileName =
+      `${currentSession.user.id}/${crypto.randomUUID()}.${extension}`;
+
+    const { error } = await supabaseClient.storage
+      .from("service-attachments")
+      .upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: false
+      });
+
+    if (error) throw error;
+
+    const { data } = supabaseClient.storage
+      .from("service-attachments")
+      .getPublicUrl(fileName);
+
+    uploadedUrls.push(data.publicUrl);
+  }
+
+  return uploadedUrls;
+}
+
+/* =========================================
+   SUBMIT SERVICE REQUEST
+========================================= */
+
+async function submitServiceRequest(event) {
+  event.preventDefault();
+
+  if (!currentSession) {
+    showToast("Please log in before submitting a request.", "error");
+    openLogin();
+    return;
+  }
+
+  const title = $("service-title").value.trim();
+  const minecraftName = $("service-player").value.trim();
+  const description = $("service-description").value.trim();
+  const budgetValue = $("service-budget").value.trim();
+  const deadline = $("service-deadline").value || null;
+
+  const rawLinks = $("service-links").value
+    .split("\n")
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  const files = $("service-images").files;
+
+  if (!title || !minecraftName || !description) {
+    showToast("Please complete all required fields.", "error");
+    return;
+  }
+
+  if (
+    budgetValue !== "" &&
+    (!Number.isFinite(Number(budgetValue)) ||
+      Number(budgetValue) < 0)
+  ) {
+    showToast("Please enter a valid budget.", "error");
+    return;
+  }
+
+  const links = [];
+
+  for (const link of rawLinks) {
+    const safeLink = safeExternalUrl(link);
+
+    if (!safeLink) {
+      showToast(`Invalid reference link: ${link}`, "error");
+      return;
+    }
+
+    links.push(safeLink);
+  }
+
+  const button = event.submitter;
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Submitting...";
+  }
+
+  try {
+    const imageUrls = await uploadServiceImages(files);
+
+    const desiredPrice =
+      budgetValue === "" ? null : Number(budgetValue);
+
+    const orderData = {
+      request_type: "service",
+      items: [{
+        type: "service",
+        name: title,
+        quantity: 1,
+        description
+      }],
+      description,
+      links,
+      image_urls: imageUrls,
+      desired_price: desiredPrice,
+      subtotal: desiredPrice || 0,
+      discount_amount: 0,
+      total: desiredPrice || 0,
+      status: "pending",
+      minecraft_name: minecraftName,
+      note: "",
+      user_id: currentSession.user.id,
+      due_date: deadline
+    };
+
+    const { error } = await supabaseClient
+      .from("orders")
+      .insert(orderData);
+
+    if (error) throw error;
+
+    $("service-form").reset();
+
+    showToast("Your service request has been submitted.");
+
+  } catch (error) {
+    console.error("Service request error:", error);
+
+    showToast(
+      `Request failed: ${error.message}`,
+      "error"
+    );
+
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Submit service request";
+    }
+  }
+}
+
 /* =========================================
    AUTHENTICATION
 ========================================= */
 
 async function loadSession() {
-  try {
-    const { data, error } = await supabaseClient.auth.getSession();
+  const {
+    data: { session },
+    error
+  } = await supabaseClient.auth.getSession();
 
-    if (error) throw error;
+  if (error) {
+    console.error("Session error:", error);
+    return;
+  }
 
-    currentSession = data.session || null;
+  currentSession = session;
 
-    await updateAuthUI();
+  await updateAuthUI();
 
-    if (currentSession) {
-      await checkAdminRole();
-    } else {
-      isAdmin = false;
-    }
-  } catch (error) {
-    console.error("Session loading failed:", error);
-    currentSession = null;
+  if (currentSession) {
+    await checkAdminRole();
+  } else {
     isAdmin = false;
-    updateAuthUI();
   }
 }
 
@@ -737,32 +1625,185 @@ async function loadSession() {
 async function updateAuthUI() {
   const loginButton = $("login-button");
   const accountButton = $("account-button");
+  const logoutButton = $("logout-button");
+  const userLabel = $("user-label");
   const adminButton = $("admin-button");
 
   if (currentSession) {
-    const email = currentSession.user.email || "Account";
+    const username =
+      currentSession.user.user_metadata?.minecraft_name ||
+      currentSession.user.email ||
+      "Account";
 
-    if (loginButton) loginButton.style.display = "none";
+    if (loginButton) loginButton.hidden = true;
+    if (accountButton) accountButton.hidden = false;
+    if (logoutButton) logoutButton.hidden = false;
 
-    if (accountButton) {
-      accountButton.style.display = "";
-      accountButton.textContent = email;
+    if (userLabel) {
+      userLabel.textContent = username;
     }
 
-    if (adminButton) {
-      adminButton.style.display = isAdmin ? "" : "none";
-    }
   } else {
-    if (loginButton) loginButton.style.display = "";
+    if (loginButton) loginButton.hidden = false;
+    if (accountButton) accountButton.hidden = true;
+    if (logoutButton) logoutButton.hidden = true;
 
-    if (accountButton) {
-      accountButton.style.display = "none";
+    if (userLabel) {
+      userLabel.textContent = "";
     }
 
     if (adminButton) {
-      adminButton.style.display = "none";
+      adminButton.hidden = true;
+    }
+
+    isAdmin = false;
+  }
+}
+
+/* =========================================
+   LOGIN MODAL
+========================================= */
+
+function openLogin() {
+  const modal = $("login-modal");
+
+  if (!modal) {
+    showToast("Login is currently unavailable.", "error");
+    return;
+  }
+
+  modal.classList.add("show");
+}
+
+function closeLogin() {
+  const modal = $("login-modal");
+
+  if (modal) {
+    modal.classList.remove("show");
+  }
+}
+
+if ($("login-button")) {
+  $("login-button").addEventListener("click", openLogin);
+}
+
+if ($("login-close")) {
+  $("login-close").addEventListener("click", closeLogin);
+}
+
+if ($("login-modal")) {
+  $("login-modal").addEventListener("click", event => {
+    if (event.target === $("login-modal")) {
+      closeLogin();
+    }
+  });
+}
+
+/* =========================================
+   SIGN IN
+========================================= */
+
+async function signIn(event) {
+  event.preventDefault();
+
+  const email = $("login-email")?.value.trim() || "";
+  const password = $("login-password")?.value || "";
+  const message = $("login-message");
+  const button = $("login-form")?.querySelector(
+    'button[type="submit"]'
+  );
+
+  if (message) {
+    message.textContent = "Signing in...";
+  }
+
+  if (button) {
+    button.disabled = true;
+  }
+
+  try {
+    const { data, error } = await supabaseClient.auth
+      .signInWithPassword({
+        email,
+        password
+      });
+
+    if (error) throw error;
+
+    currentSession = data.session;
+
+    await updateAuthUI();
+    await checkAdminRole();
+
+    closeLogin();
+
+    showToast("Successfully signed in.");
+
+    if ($("login-form")) {
+      $("login-form").reset();
+    }
+
+  } catch (error) {
+    console.error("Sign in error:", error);
+
+    if (message) {
+      message.textContent = error.message;
+    }
+
+  } finally {
+    if (button) {
+      button.disabled = false;
     }
   }
+}
+
+if ($("login-form")) {
+  $("login-form").addEventListener("submit", signIn);
+}
+
+/* =========================================
+   SIGN OUT
+========================================= */
+
+async function signOut() {
+  const { error } = await supabaseClient.auth.signOut();
+
+  if (error) {
+    showToast(error.message, "error");
+    return;
+  }
+
+  currentSession = null;
+  isAdmin = false;
+  requests = [];
+  catalogCache = [];
+
+  await updateAuthUI();
+
+  closeAdmin();
+  showCategory("All");
+
+  showToast("You have been signed out.");
+}
+
+if ($("logout-button")) {
+  $("logout-button").addEventListener("click", signOut);
+}
+
+/* =========================================
+   ACCOUNT BUTTON
+========================================= */
+
+if ($("account-button")) {
+  $("account-button").addEventListener("click", () => {
+    if (!currentSession) return;
+
+    const username =
+      currentSession.user.user_metadata?.minecraft_name ||
+      currentSession.user.email;
+
+    showToast(`Signed in as ${username}.`);
+  });
 }
 
 /* =========================================
@@ -772,367 +1813,258 @@ async function updateAuthUI() {
 async function checkAdminRole() {
   if (!currentSession) {
     isAdmin = false;
-    await updateAuthUI();
-    return false;
-  }
 
-  try {
-    const { data, error } = await supabaseClient
-      .from("profiles")
-      .select("role")
-      .eq("id", currentSession.user.id)
-      .maybeSingle();
+    if ($("admin-button")) {
+      $("admin-button").hidden = true;
+    }
 
-    if (error) throw error;
-
-    isAdmin = ["admin", "editor"].includes(data?.role);
-
-    await updateAuthUI();
-
-    return isAdmin;
-  } catch (error) {
-    console.error("Admin role check failed:", error);
-
-    isAdmin = false;
-
-    await updateAuthUI();
-
-    return false;
-  }
-}
-
-/* =========================================
-   LOGIN MODAL
-========================================= */
-
-function openLoginModal() {
-  const modal = $("login-modal");
-
-  if (modal) {
-    modal.classList.add("active");
-  }
-}
-
-function closeLoginModal() {
-  const modal = $("login-modal");
-
-  if (modal) {
-    modal.classList.remove("active");
-  }
-}
-
-const loginButton = $("login-button");
-
-if (loginButton) {
-  loginButton.addEventListener("click", openLoginModal);
-}
-
-const loginCloseButton = $("login-close");
-
-if (loginCloseButton) {
-  loginCloseButton.addEventListener("click", closeLoginModal);
-}
-
-/* =========================================
-   SIGN IN
-========================================= */
-
-async function signIn(event) {
-  if (event) event.preventDefault();
-
-  const email = $("login-email")?.value.trim();
-  const password = $("login-password")?.value;
-
-  if (!email || !password) {
-    showToast("Enter your email and password.", "error");
     return;
   }
 
-  const submitButton = $("login-submit");
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("role")
+    .eq("id", currentSession.user.id)
+    .maybeSingle();
 
-  if (submitButton) {
-    submitButton.disabled = true;
-    submitButton.textContent = "Signing in...";
-  }
-
-  try {
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (error) throw error;
-
-    currentSession = data.session;
-
-    await checkAdminRole();
-    await updateAuthUI();
-
-    closeLoginModal();
-
-    showToast("Welcome back!", "success");
-
-    if (isAdmin) {
-      await loadRequests();
-    }
-  } catch (error) {
-    console.error("Login failed:", error);
-
-    showToast(
-      error.message || "Login failed.",
-      "error"
-    );
-  } finally {
-    if (submitButton) {
-      submitButton.disabled = false;
-      submitButton.textContent = "Sign in";
-    }
-  }
-}
-
-const loginForm = $("login-form");
-
-if (loginForm) {
-  loginForm.addEventListener("submit", signIn);
-}
-
-/* =========================================
-   SIGN OUT
-========================================= */
-
-async function signOut() {
-  try {
-    const { error } = await supabaseClient.auth.signOut();
-
-    if (error) throw error;
-
-    currentSession = null;
+  if (error) {
+    console.error("Role check failed:", error);
     isAdmin = false;
 
-    await updateAuthUI();
-
-    closeAdmin();
-    closeCart();
-
-    showToast("You have been signed out.", "success");
-  } catch (error) {
-    console.error("Sign out failed:", error);
-    showToast("Could not sign out.", "error");
-  }
-}
-
-const signOutButton = $("sign-out-button");
-
-if (signOutButton) {
-  signOutButton.addEventListener("click", signOut);
-}
-
-/* =========================================
-   ACCOUNT BUTTON
-========================================= */
-
-const accountButton = $("account-button");
-
-if (accountButton) {
-  accountButton.addEventListener("click", () => {
-    if (!currentSession) return;
-
-    const accountModal = $("account-modal");
-
-    if (accountModal) {
-      accountModal.classList.add("active");
-    } else {
-      showToast(
-        currentSession.user.email || "Signed in",
-        "info"
-      );
+    if ($("admin-button")) {
+      $("admin-button").hidden = true;
     }
-  });
-}
 
-const accountCloseButton = $("account-close");
+    return;
+  }
 
-if (accountCloseButton) {
-  accountCloseButton.addEventListener("click", () => {
-    $("account-modal")?.classList.remove("active");
-  });
+  isAdmin =
+    data?.role === "admin" ||
+    data?.role === "editor";
+
+  if ($("admin-button")) {
+    $("admin-button").hidden = !isAdmin;
+  }
+
+  if (isAdmin) {
+    await loadRequests();
+    await loadCatalogProducts();
+  }
 }
 
 /* =========================================
    AUTH STATE CHANGES
 ========================================= */
 
-supabaseClient.auth.onAuthStateChange((_event, session) => {
-  currentSession = session || null;
+supabaseClient.auth.onAuthStateChange(
+  (_event, session) => {
+    currentSession = session;
 
-  setTimeout(async () => {
-    await checkAdminRole();
+    window.setTimeout(async () => {
+      await updateAuthUI();
 
-    if (isAdmin) {
-      await loadRequests();
-    }
-  }, 0);
-});
+      if (session) {
+        await checkAdminRole();
+      } else {
+        isAdmin = false;
+        requests = [];
+        catalogCache = [];
+
+        if ($("admin-button")) {
+          $("admin-button").hidden = true;
+        }
+
+        if ($("admin-section")) {
+          $("admin-section").hidden = true;
+          $("admin-section").style.display = "none";
+        }
+      }
+    }, 0);
+  }
+);
 
 /* =========================================
    ADMIN DASHBOARD
 ========================================= */
 
-async function openAdmin() {
-  if (!currentSession) {
-    showToast("Please sign in first.", "error");
-    openLoginModal();
+function openAdmin() {
+  if (!isAdmin) {
+    showToast(
+      "You do not have permission to access the admin area.",
+      "error"
+    );
     return;
   }
 
-  const allowed = await checkAdminRole();
-
-  if (!allowed) {
-    showToast("You do not have admin permissions.", "error");
-    return;
+  if ($("offers")) {
+    $("offers").style.display = "none";
   }
 
-  const offersSection = $("offers-section");
-  const shopSection = $("shop-section");
-  const adminSection = $("admin-section");
-
-  if (offersSection) offersSection.style.display = "none";
-  if (shopSection) shopSection.style.display = "none";
-
-  if (adminSection) {
-    adminSection.style.display = "";
+  if ($("shop")) {
+    $("shop").style.display = "none";
   }
 
-  document.querySelectorAll(".nav-link").forEach((link) => {
+  if ($("admin-section")) {
+    $("admin-section").hidden = false;
+    $("admin-section").style.display = "";
+
+    $("admin-section").scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }
+
+  document.querySelectorAll(".nav-link").forEach(link => {
     link.classList.remove("active");
   });
 
-  await loadRequests();
-  await loadCatalogProducts();
+  loadRequests();
+  loadCatalogProducts();
 }
 
 function closeAdmin() {
-  const adminSection = $("admin-section");
-
-  if (adminSection) {
-    adminSection.style.display = "none";
+  if ($("admin-section")) {
+    $("admin-section").hidden = true;
+    $("admin-section").style.display = "none";
   }
 
   showCategory("All");
 }
 
-const adminButton = $("admin-button");
-
-if (adminButton) {
-  adminButton.addEventListener("click", openAdmin);
+if ($("admin-button")) {
+  $("admin-button").addEventListener("click", openAdmin);
 }
 
-const adminCloseButton = $("admin-close");
-
-if (adminCloseButton) {
-  adminCloseButton.addEventListener("click", closeAdmin);
+if ($("admin-close")) {
+  $("admin-close").addEventListener("click", closeAdmin);
 }
 
 /* =========================================
-   ADMIN ORDERS
+   LOAD ORDERS / REQUESTS
 ========================================= */
 
 async function loadRequests() {
-  if (!isAdmin || !currentSession) return;
+  if (!isAdmin) return;
 
-  try {
-    const { data, error } = await supabaseClient
-      .from("orders")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const container = $("admin-requests");
 
-    if (error) throw error;
+  if (container) {
+    container.innerHTML = `
+      <div class="loading-state">Loading orders...</div>
+    `;
+  }
 
-    requests = data || [];
+  const { data, error } = await supabaseClient
+    .from("orders")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-    renderRequests();
-    updateAdminStats();
-  } catch (error) {
+  if (error) {
     console.error("Could not load orders:", error);
-
-    const container = $("admin-orders");
 
     if (container) {
       container.innerHTML = `
-        <div class="empty-state">
-          <h3>Orders could not be loaded</h3>
-          <p>Please check your Supabase permissions.</p>
-        </div>
+        <p class="error-message">
+          Could not load orders: ${escapeHTML(error.message)}
+        </p>
       `;
     }
+
+    return;
   }
+
+  requests = data || [];
+
+  renderRequests();
+  renderAdminStats();
+}
+
+/* =========================================
+   REFRESH ORDERS
+========================================= */
+
+if ($("refresh-requests")) {
+  $("refresh-requests").addEventListener("click", loadRequests);
 }
 
 /* =========================================
    ADMIN STATISTICS
 ========================================= */
 
-function updateAdminStats() {
+function renderAdminStats() {
   const totalOrders = requests.length;
 
   const pendingOrders = requests.filter(
-    (request) => request.status === "pending"
+    request => request.status === "pending"
   ).length;
 
   const completedOrders = requests.filter(
-    (request) => request.status === "completed"
+    request => request.status === "completed"
   ).length;
 
-  const revenue = requests
-    .filter((request) => request.status === "completed")
-    .reduce((sum, request) => {
-      return sum + (Number(request.total) || 0);
-    }, 0);
+  const totalRevenue = requests
+    .filter(request => request.status === "completed")
+    .reduce(
+      (sum, request) => sum + Number(request.total || 0),
+      0
+    );
 
   setText("admin-total-orders", totalOrders);
   setText("admin-pending-orders", pendingOrders);
   setText("admin-completed-orders", completedOrders);
-  setText("admin-revenue", money(revenue));
+  setText("admin-revenue", money(totalRevenue));
 }
 
 /* =========================================
-   ADMIN ORDER FILTER
+   REQUEST FILTER
 ========================================= */
 
 function filterRequests(filter) {
+  const allowedFilters = [
+    "all",
+    "pending",
+    "processing",
+    "completed",
+    "cancelled"
+  ];
+
+  if (!allowedFilters.includes(filter)) {
+    filter = "all";
+  }
+
   currentRequestFilter = filter;
 
-  document.querySelectorAll(".order-filter").forEach((button) => {
+  document.querySelectorAll("[data-request-filter]").forEach(button => {
     button.classList.toggle(
       "active",
-      button.dataset.filter === filter
+      button.dataset.requestFilter === filter
     );
   });
 
   renderRequests();
 }
 
-document.querySelectorAll(".order-filter").forEach((button) => {
+document.querySelectorAll("[data-request-filter]").forEach(button => {
   button.addEventListener("click", () => {
-    filterRequests(button.dataset.filter || "all");
+    filterRequests(button.dataset.requestFilter);
   });
 });
 
 /* =========================================
-   ADMIN ORDER DISPLAY
+   RENDER REQUESTS
 ========================================= */
 
 function renderRequests() {
-  const container = $("admin-orders");
+  const container = $("admin-requests");
 
   if (!container) return;
 
   let filteredRequests = [...requests];
 
   if (currentRequestFilter !== "all") {
-    filteredRequests = filteredRequests.filter((request) => {
-      return request.status === currentRequestFilter;
-    });
+    filteredRequests = filteredRequests.filter(
+      request => request.status === currentRequestFilter
+    );
   }
 
   if (!filteredRequests.length) {
@@ -1146,131 +2078,201 @@ function renderRequests() {
     return;
   }
 
-  container.innerHTML = filteredRequests.map((request) => {
-    const details = request.details || {};
-    const isService = request.request_type === "service";
+  container.innerHTML = filteredRequests.map(request => {
+    const items = Array.isArray(request.items)
+      ? request.items
+      : [];
 
-    let content = "";
+    const itemList = items.map(item => `
+      <div class="request-item">
+        <span>${escapeHTML(item.name || "Unknown item")}</span>
+        <span>× ${Number(item.quantity || 1)}</span>
+      </div>
+    `).join("");
 
-    if (isService) {
-      content = `
-        <div class="order-details">
-          <p><strong>Service:</strong>
-            ${escapeHTML(details.service_type || "Other")}
-          </p>
+    const allowedStatuses = [
+      "pending",
+      "processing",
+      "completed",
+      "cancelled"
+    ];
 
-          <p><strong>Project:</strong>
-            ${escapeHTML(details.title || "Untitled")}
-          </p>
+    const status = allowedStatuses.includes(request.status)
+      ? request.status
+      : "pending";
 
-          <p><strong>Description:</strong>
-            ${escapeHTML(details.description || "")}
-          </p>
+    const links = Array.isArray(request.links)
+      ? request.links
+      : [];
 
-          <p><strong>Budget:</strong>
-            ${details.budget === null || details.budget === undefined
-              ? "Not specified"
-              : money(details.budget)}
-          </p>
-
-          ${
-            Array.isArray(details.attachments) &&
-            details.attachments.length
-              ? `
-                <div class="order-attachments">
-                  ${details.attachments.map((url) => {
-                    const safeUrl = safeExternalUrl(url);
-
-                    return safeUrl
-                      ? `<a href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer">View attachment</a>`
-                      : "";
-                  }).join("")}
-                </div>
-              `
-              : ""
-          }
-        </div>
-      `;
-    } else {
-      const items = Array.isArray(details.items)
-        ? details.items
-        : [];
-
-      content = `
-        <div class="order-details">
-          ${
-            items.length
-              ? items.map((item) => `
-                  <div class="order-line">
-                    <span>
-                      ${escapeHTML(item.name || "Product")}
-                      × ${Number(item.quantity) || 1}
-                    </span>
-
-                    <strong>
-                      ${money(item.total_price || 0)}
-                    </strong>
-                  </div>
-                `).join("")
-              : "<p>No item details available.</p>"
-          }
-        </div>
-      `;
-    }
+    const images = Array.isArray(request.image_urls)
+      ? request.image_urls
+      : [];
 
     return `
-      <article class="admin-order-card">
-        <div class="admin-order-header">
+      <article class="admin-request-card">
+        <div class="request-header">
           <div>
-            <strong>Order #${escapeHTML(request.id)}</strong>
-            <span>${formatDate(request.created_at)}</span>
+            <span class="request-number">
+              ORDER #${escapeHTML(String(request.id).slice(0, 8))}
+            </span>
+
+            <h3>
+              ${escapeHTML(request.minecraft_name || "Unknown player")}
+            </h3>
           </div>
 
-          <span class="status-badge status-${escapeHTML(request.status)}">
-            ${escapeHTML(request.status || "pending")}
+          <span class="status-badge status-${status}">
+            ${status.toUpperCase()}
           </span>
         </div>
 
-        <div class="admin-order-meta">
-          <span>
-            ${isService ? "Service request" : "Product order"}
-          </span>
-
-          <strong>${money(request.total || 0)}</strong>
+        <div class="request-meta">
+          <span>${formatDate(request.created_at)}</span>
+          <span>${money(request.total || 0)}</span>
+          <span>${escapeHTML(request.request_type || "product")}</span>
         </div>
 
-        ${content}
+        <div class="request-items">
+          ${itemList || "<p>No item details available.</p>"}
+        </div>
 
-        <div class="admin-order-actions">
-          <label for="status-${escapeHTML(request.id)}">
-            Update status
-          </label>
+        ${request.description ? `
+          <div class="request-description">
+            <strong>Description</strong>
+            <p>${escapeHTML(request.description)}</p>
+          </div>
+        ` : ""}
 
+        ${request.note ? `
+          <div class="request-description">
+            <strong>Customer note</strong>
+            <p>${escapeHTML(request.note)}</p>
+          </div>
+        ` : ""}
+
+        ${request.desired_price !== null &&
+          request.desired_price !== undefined ? `
+          <div class="request-description">
+            <strong>Desired budget</strong>
+            <p>${money(request.desired_price)}</p>
+          </div>
+        ` : ""}
+
+        ${request.due_date ? `
+          <div class="request-description">
+            <strong>Desired deadline</strong>
+            <p>${formatDate(request.due_date)}</p>
+          </div>
+        ` : ""}
+
+        ${request.delivery_district || request.delivery_address ? `
+          <div class="request-description">
+            <strong>Delivery</strong>
+            <p>
+              ${escapeHTML(request.delivery_district || "")}
+              ${escapeHTML(request.delivery_address || "")}
+            </p>
+          </div>
+        ` : ""}
+
+        ${links.length ? `
+          <div class="request-links">
+            <strong>Reference links</strong>
+
+            ${links.map(link => {
+              const safeLink = safeExternalUrl(link);
+
+              return safeLink ? `
+                <a
+                  href="${escapeHTML(safeLink)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >Open reference</a>
+              ` : "";
+            }).join("")}
+          </div>
+        ` : ""}
+
+        ${images.length ? `
+          <div class="request-images">
+            ${images.map(url => {
+              const safeUrl = safeExternalUrl(url);
+
+              return safeUrl ? `
+                <a
+                  href="${escapeHTML(safeUrl)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <img
+                    src="${escapeHTML(safeUrl)}"
+                    alt="Reference image"
+                    loading="lazy"
+                  >
+                </a>
+              ` : "";
+            }).join("")}
+          </div>
+        ` : ""}
+
+        <div class="request-actions">
           <select
-            id="status-${escapeHTML(request.id)}"
-            onchange="updateRequestStatus('${escapeHTML(request.id)}', this.value)"
+            data-status-select="${escapeHTML(request.id)}"
+            aria-label="Change order status"
           >
-            <option value="pending" ${request.status === "pending" ? "selected" : ""}>Pending</option>
-            <option value="processing" ${request.status === "processing" ? "selected" : ""}>Processing</option>
-            <option value="completed" ${request.status === "completed" ? "selected" : ""}>Completed</option>
-            <option value="cancelled" ${request.status === "cancelled" ? "selected" : ""}>Cancelled</option>
+            <option value="pending" ${status === "pending" ? "selected" : ""}>
+              Pending
+            </option>
+
+            <option value="processing" ${status === "processing" ? "selected" : ""}>
+              Processing
+            </option>
+
+            <option value="completed" ${status === "completed" ? "selected" : ""}>
+              Completed
+            </option>
+
+            <option value="cancelled" ${status === "cancelled" ? "selected" : ""}>
+              Cancelled
+            </option>
           </select>
+
+          <button
+            class="secondary-button"
+            data-update-status="${escapeHTML(request.id)}"
+            type="button"
+          >
+            Update status
+          </button>
         </div>
       </article>
     `;
   }).join("");
+
+  container.querySelectorAll("[data-update-status]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.updateStatus;
+
+      const select = container.querySelector(
+        `[data-status-select="${CSS.escape(id)}"]`
+      );
+
+      if (!select) return;
+
+      button.disabled = true;
+      button.textContent = "Updating...";
+
+      await updateRequestStatus(id, select.value);
+    });
+  });
 }
 
 /* =========================================
-   UPDATE ORDER STATUS
+   UPDATE REQUEST STATUS
 ========================================= */
 
-async function updateRequestStatus(requestId, status) {
-  if (!isAdmin) {
-    showToast("Admin permissions required.", "error");
-    return;
-  }
-
+async function updateRequestStatus(id, status) {
   const allowedStatuses = [
     "pending",
     "processing",
@@ -1278,827 +2280,436 @@ async function updateRequestStatus(requestId, status) {
     "cancelled"
   ];
 
-  if (!allowedStatuses.includes(status)) {
-    showToast("Invalid order status.", "error");
+  if (!isAdmin) {
+    showToast("Permission denied.", "error");
     return;
   }
 
-  try {
-    const { error } = await supabaseClient
-      .from("orders")
-      .update({
-        status
-      })
-      .eq("id", requestId);
-
-    if (error) throw error;
-
-    const request = requests.find(
-      (entry) => String(entry.id) === String(requestId)
-    );
-
-    if (request) {
-      request.status = status;
-    }
-
-    renderRequests();
-    updateAdminStats();
-
-    showToast("Order status updated.", "success");
-  } catch (error) {
-    console.error("Status update failed:", error);
-    showToast("Could not update order status.", "error");
-
-    await loadRequests();
+  if (!allowedStatuses.includes(status)) {
+    showToast("Invalid status.", "error");
+    return;
   }
+
+  const { error } = await supabaseClient
+    .from("orders")
+    .update({ status })
+    .eq("id", id);
+
+  if (error) {
+    console.error("Status update failed:", error);
+    showToast(error.message, "error");
+    return;
+  }
+
+  showToast("Order status updated.");
+
+  await loadRequests();
 }
+
 /* =========================================
-   ADMIN PRODUCT CATALOGUE
+   LOAD COMPLETE PRODUCT CATALOG
 ========================================= */
 
 async function loadCatalogProducts() {
   if (!isAdmin) return;
 
-  const container = $("admin-products");
-
-  if (container) {
-    container.innerHTML = `
-      <div class="loading-state">Loading product catalogue...</div>
-    `;
-  }
-
-  try {
-    const { data, error } = await supabaseClient
-      .from("products")
-      .select("*")
-      .order("name", { ascending: true });
-
-    if (error) throw error;
-
-    catalogCache = data || [];
-
-    renderCatalogProducts();
-  } catch (error) {
-    console.error("Could not load product catalogue:", error);
-
-    if (container) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <h3>Catalogue could not be loaded</h3>
-          <p>Please check your Supabase permissions.</p>
-        </div>
-      `;
-    }
-  }
-}
-
-/* =========================================
-   RENDER ADMIN CATALOGUE
-========================================= */
-
-function renderCatalogProducts() {
-  const container = $("admin-products");
+  const container = $("catalog-products");
 
   if (!container) return;
 
-  const searchInput = $("admin-product-search");
-  const searchTerm = searchInput
-    ? searchInput.value.trim().toLowerCase()
-    : "";
+  container.innerHTML = `
+    <div class="loading-state">Loading catalogue...</div>
+  `;
 
-  let filteredProducts = [...catalogCache];
+  const { data, error } = await supabaseClient
+    .from("products")
+    .select("*")
+    .order("category")
+    .order("name");
 
-  if (searchTerm) {
-    filteredProducts = filteredProducts.filter((product) => {
-      return (
-        String(product.name || "").toLowerCase().includes(searchTerm) ||
-        String(product.category || "").toLowerCase().includes(searchTerm)
-      );
-    });
+  if (error) {
+    console.error("Catalogue error:", error);
+
+    container.innerHTML = `
+      <p class="error-message">
+        Could not load catalogue: ${escapeHTML(error.message)}
+      </p>
+    `;
+
+    return;
   }
 
-  if (!filteredProducts.length) {
+  catalogCache = data || [];
+
+  renderCatalogProducts(catalogCache);
+}
+
+/* =========================================
+   RENDER CATALOGUE
+========================================= */
+
+function renderCatalogProducts(catalog) {
+  const container = $("catalog-products");
+
+  if (!container) return;
+
+  const searchValue = (
+    $("catalog-search")?.value || ""
+  ).toLowerCase();
+
+  const filtered = catalog.filter(product =>
+    String(product.name || "")
+      .toLowerCase()
+      .includes(searchValue)
+  );
+
+  if (!filtered.length) {
     container.innerHTML = `
       <div class="empty-state">
         <h3>No products found</h3>
-        <p>Try another search term or import new products.</p>
+        <p>Try another search or import products.</p>
       </div>
     `;
 
     return;
   }
 
-  container.innerHTML = filteredProducts.map((product) => {
-    return `
-      <article class="admin-product-row">
-        <div class="admin-product-image">
-          ${imageMarkup(product, "catalog-product-image")}
-        </div>
+  container.innerHTML = `
+    <div class="catalog-table-wrapper">
+      <table class="catalog-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Category</th>
+            <th>Price</th>
+            <th>Stack size</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
 
-        <div class="admin-product-info">
-          <strong>${escapeHTML(product.name)}</strong>
+        <tbody>
+          ${filtered.map(product => `
+            <tr>
+              <td>
+                <strong>${escapeHTML(product.name)}</strong>
+              </td>
 
-          <span>${escapeHTML(product.category || "Items")}</span>
+              <td>${escapeHTML(product.category || "Items")}</td>
 
-          <span>${money(product.price || 0)}</span>
+              <td>
+                ${Number(product.price || 0) > 0
+                  ? money(product.price)
+                  : "Not set"}
+              </td>
 
-          <span>
-            ${product.is_active ? "Active" : "Inactive"}
-          </span>
-        </div>
+              <td>${Number(product.stack_size || 64)}</td>
 
-        <button
-          type="button"
-          class="secondary-button"
-          onclick="openCatalogProductEditor('${escapeHTML(product.id)}')"
-        >
-          Edit
-        </button>
+              <td>
+                <span class="status-badge ${
+                  product.is_active
+                    ? "status-completed"
+                    : "status-pending"
+                }">
+                  ${product.is_active ? "Active" : "Inactive"}
+                </span>
+              </td>
 
-        <button
-          type="button"
-          class="secondary-button"
-          onclick="toggleCatalogProduct('${escapeHTML(product.id)}', ${!product.is_active})"
-        >
-          ${product.is_active ? "Deactivate" : "Activate"}
-        </button>
-      </article>
-    `;
-  }).join("");
+              <td>
+                <button
+                  class="secondary-button"
+                  data-catalog-edit="${escapeHTML(product.id)}"
+                  type="button"
+                >
+                  Edit
+                </button>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.querySelectorAll("[data-catalog-edit]").forEach(button => {
+    button.addEventListener("click", () => {
+      const product = catalogCache.find(
+        item => String(item.id) === button.dataset.catalogEdit
+      );
+
+      if (product) {
+        openProductEditor(product);
+      }
+    });
+  });
 }
 
 /* =========================================
-   ADMIN PRODUCT SEARCH
+   CATALOGUE SEARCH
 ========================================= */
 
-const adminProductSearch = $("admin-product-search");
-
-if (adminProductSearch) {
-  adminProductSearch.addEventListener("input", renderCatalogProducts);
+if ($("catalog-search")) {
+  $("catalog-search").addEventListener("input", () => {
+    renderCatalogProducts(catalogCache);
+  });
 }
 
 /* =========================================
-   CATALOGUE PRODUCT EDITOR
+   CREATE NEW PRODUCT
 ========================================= */
 
-function openCatalogProductEditor(productId) {
+async function createCatalogProduct() {
   if (!isAdmin) return;
 
-  const product = catalogCache.find(
-    (entry) => String(entry.id) === String(productId)
+  const name = prompt("Enter the Minecraft item name:");
+
+  if (!name || !name.trim()) return;
+
+  const category = prompt(
+    "Category: Blocks, Items, Armor & Weapons, Enchantments",
+    "Items"
   );
 
-  if (!product) return;
-
-  editingProductId = product.id;
-
-  const modal = $("product-editor-modal");
-
-  if (!modal) return;
-
-  const nameInput = $("edit-product-name");
-  const categoryInput = $("edit-product-category");
-  const priceInput = $("edit-product-price");
-  const stackInput = $("edit-product-stack");
-  const discountInput = $("edit-product-discount");
-  const activeInput = $("edit-product-active");
-
-  if (nameInput) {
-    nameInput.value = product.name || "";
-  }
-
-  if (categoryInput) {
-    categoryInput.value = product.category || "Items";
-  }
-
-  if (priceInput) {
-    priceInput.value = Number(product.price) || 0;
-  }
-
-  if (stackInput) {
-    stackInput.value = Number(product.stack_size) || 64;
-  }
-
-  if (discountInput) {
-    discountInput.value = Number(product.discount_percent) || 0;
-  }
-
-  if (activeInput) {
-    activeInput.checked = Boolean(product.is_active);
-  }
-
-  modal.classList.add("active");
-}
-
-/* =========================================
-   TOGGLE PRODUCT ACTIVE STATUS
-========================================= */
-
-async function toggleCatalogProduct(productId, active) {
-  if (!isAdmin) return;
-
-  try {
-    const { error } = await supabaseClient
-      .from("products")
-      .update({
-        is_active: Boolean(active)
-      })
-      .eq("id", productId);
-
-    if (error) throw error;
-
-    await loadCatalogProducts();
-    await loadProducts();
-
-    showToast(
-      active ? "Product activated." : "Product deactivated.",
-      "success"
-    );
-  } catch (error) {
-    console.error("Could not update product:", error);
-    showToast("Could not update product.", "error");
-  }
-}
-
-/* =========================================
-   CREATE PRODUCT
-========================================= */
-
-async function createCatalogProduct(event) {
-  if (event) event.preventDefault();
-
-  if (!isAdmin) {
-    showToast("Admin permissions required.", "error");
-    return;
-  }
-
-  const name = $("new-product-name")?.value.trim();
-  const categoryValue = $("new-product-category")?.value;
-  const price = Number($("new-product-price")?.value);
-  const description = $("new-product-description")?.value.trim();
-  const stackSize = Number($("new-product-stack")?.value || 64);
-
-  const allowedCategories = [
+  const validCategories = [
     "Blocks",
     "Items",
     "Armor & Weapons",
     "Enchantments"
   ];
 
-  if (!name) {
-    showToast("Please enter a product name.", "error");
+  if (!validCategories.includes(category)) {
+    showToast("Invalid category.", "error");
     return;
   }
 
-  if (!allowedCategories.includes(categoryValue)) {
-    showToast("Please select a valid category.", "error");
+  const { error } = await supabaseClient
+    .from("products")
+    .insert({
+      name: name.trim(),
+      category,
+      description: "",
+      price: 0,
+      stack_size: 64,
+      discount_percent: 0,
+      is_active: false
+    });
+
+  if (error) {
+    showToast(error.message, "error");
     return;
   }
 
-  if (
-    !Number.isFinite(price) ||
-    price < 0 ||
-    !Number.isInteger(stackSize) ||
-    stackSize < 1 ||
-    stackSize > 64
-  ) {
-    showToast("Please enter valid product values.", "error");
-    return;
-  }
+  showToast("Product added to catalogue.");
 
-  try {
-    const { error } = await supabaseClient
-      .from("products")
-      .insert({
-        name,
-        category: categoryValue,
-        description,
-        price: roundMoney(price),
-        stack_size: stackSize,
-        discount_percent: 0,
-        is_active: false
-      });
-
-    if (error) throw error;
-
-    const form = $("new-product-form");
-
-    if (form) form.reset();
-
-    await loadCatalogProducts();
-    await loadProducts();
-
-    showToast("Product created as inactive.", "success");
-  } catch (error) {
-    console.error("Product creation failed:", error);
-    showToast("Could not create product.", "error");
-  }
+  await loadCatalogProducts();
 }
 
-const newProductForm = $("new-product-form");
-
-if (newProductForm) {
-  newProductForm.addEventListener("submit", createCatalogProduct);
+if ($("catalog-add-button")) {
+  $("catalog-add-button").addEventListener(
+    "click",
+    createCatalogProduct
+  );
 }
 
 /* =========================================
-   CATALOG IMPORT: CSV PARSER
+   IMPORT PRODUCTS FROM JSON OR CSV
 ========================================= */
 
 function parseCatalogCSV(text) {
-  const rows = [];
-  let row = [];
-  let value = "";
-  let insideQuotes = false;
+  const lines = text
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .filter(line => line.trim());
 
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1];
+  if (lines.length < 2) {
+    throw new Error("The CSV file is empty.");
+  }
 
-    if (char === '"' && insideQuotes && nextChar === '"') {
-      value += '"';
-      i++;
-    } else if (char === '"') {
-      insideQuotes = !insideQuotes;
-    } else if (char === "," && !insideQuotes) {
-      row.push(value.trim());
-      value = "";
-    } else if (
-      (char === "\n" || char === "\r") &&
-      !insideQuotes
-    ) {
-      if (char === "\r" && nextChar === "\n") {
-        i++;
+  const separator = lines[0].includes(";") ? ";" : ",";
+
+  function parseLine(line) {
+    const result = [];
+    let value = "";
+    let insideQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+
+      if (char === '"') {
+        if (insideQuotes && line[i + 1] === '"') {
+          value += '"';
+          i++;
+        } else {
+          insideQuotes = !insideQuotes;
+        }
+      } else if (char === separator && !insideQuotes) {
+        result.push(value.trim());
+        value = "";
+      } else {
+        value += char;
       }
-
-      row.push(value.trim());
-
-      if (row.some((cell) => cell !== "")) {
-        rows.push(row);
-      }
-
-      row = [];
-      value = "";
-    } else {
-      value += char;
     }
+
+    result.push(value.trim());
+
+    return result;
   }
 
-  row.push(value.trim());
-
-  if (row.some((cell) => cell !== "")) {
-    rows.push(row);
-  }
-
-  if (rows.length < 2) {
-    return [];
-  }
-
-  const headers = rows[0].map((header) =>
-    header.trim().toLowerCase().replace(/^\uFEFF/, "")
+  const headers = parseLine(lines[0]).map(header =>
+    header.trim().toLowerCase()
   );
 
-  return rows.slice(1).map((cells) => {
-    const object = {};
+  return lines.slice(1).map(line => {
+    const values = parseLine(line);
+    const product = {};
 
     headers.forEach((header, index) => {
-      object[header] = cells[index] ?? "";
+      product[header] = values[index] || "";
     });
 
-    return object;
+    return product;
   });
 }
 
-/* =========================================
-   CATALOG IMPORT: CATEGORY DETECTION
-========================================= */
-
-function detectImportedCategory(raw) {
-  const explicitCategory = String(
-    raw.category ||
-    raw.categories ||
-    raw.type ||
-    ""
-  ).toLowerCase();
-
-  if (
-    explicitCategory.includes("armor") ||
-    explicitCategory.includes("weapon") ||
-    explicitCategory.includes("sword") ||
-    explicitCategory.includes("helmet") ||
-    explicitCategory.includes("chestplate") ||
-    explicitCategory.includes("leggings") ||
-    explicitCategory.includes("boots") ||
-    explicitCategory.includes("bow") ||
-    explicitCategory.includes("crossbow") ||
-    explicitCategory.includes("shield") ||
-    explicitCategory.includes("trident")
-  ) {
-    return "Armor & Weapons";
-  }
-
-  if (
-    explicitCategory.includes("enchant")
-  ) {
-    return "Enchantments";
-  }
-
-  if (
-    explicitCategory.includes("block") ||
-    explicitCategory.includes("building")
-  ) {
-    return "Blocks";
-  }
-
-  if (
-    explicitCategory.includes("item") ||
-    explicitCategory.includes("equipment") ||
-    explicitCategory.includes("food") ||
-    explicitCategory.includes("tool") ||
-    explicitCategory.includes("material")
-  ) {
-    return "Items";
-  }
-
-  const name = String(
-    raw.name ||
-    raw.title ||
-    raw.displayName ||
-    raw.translation_key ||
-    raw.id ||
-    ""
-  ).toLowerCase();
-
-  const blockWords = [
-    "stone", "dirt", "grass", "planks", "log", "wood",
-    "ore", "block", "glass", "sand", "gravel", "concrete",
-    "terracotta", "wool", "slab", "stairs", "fence",
-    "wall", "door", "trapdoor", "leaves", "sapling",
-    "bricks", "cobblestone", "obsidian", "netherrack"
-  ];
-
-  const armorWeaponWords = [
-    "sword", "axe", "pickaxe", "shovel", "hoe",
-    "helmet", "chestplate", "leggings", "boots",
-    "bow", "crossbow", "shield", "trident",
-    "mace", "spear"
-  ];
-
-  const enchantmentWords = [
-    "enchanted_book", "enchanting_table"
-  ];
-
-  if (enchantmentWords.some((word) => name.includes(word))) {
-    return "Enchantments";
-  }
-
-  if (armorWeaponWords.some((word) => name.includes(word))) {
-    return "Armor & Weapons";
-  }
-
-  if (blockWords.some((word) => name.includes(word))) {
-    return "Blocks";
-  }
-
-  return "Items";
-}
-
-/* =========================================
-   CATALOG IMPORT: STACK SIZE
-========================================= */
-
-function detectImportedStackSize(raw) {
-  const possibleValues = [
-    raw.stack_size,
-    raw.stackSize,
-    raw.max_stack_size,
-    raw.maxStackSize,
-    raw.max_stack,
-    raw.maxStack
-  ];
-
-  for (const value of possibleValues) {
-    const number = Number(value);
-
-    if (
-      Number.isInteger(number) &&
-      number >= 1 &&
-      number <= 64
-    ) {
-      return number;
-    }
-  }
-
-  const name = String(
-    raw.name ||
-    raw.title ||
-    raw.id ||
-    raw.translation_key ||
-    ""
-  ).toLowerCase();
-
-  const unstackableWords = [
-    "sword", "pickaxe", "shovel", "axe", "hoe",
-    "helmet", "chestplate", "leggings", "boots",
-    "bow", "crossbow", "shield", "trident",
-    "mace", "fishing_rod", "fishing rod",
-    "shears", "flint_and_steel", "elytra",
-    "carrot_on_a_stick", "warped_fungus_on_a_stick"
-  ];
-
-  const sixteenStackWords = [
-    "snowball", "egg", "ender_pearl", "sign",
-    "hanging_sign", "banner", "bucket",
-    "boat", "chest_boat", "minecart",
-    "armor_stand", "honey_bottle"
-  ];
-
-  if (unstackableWords.some((word) => name.includes(word))) {
-    return 1;
-  }
-
-  if (sixteenStackWords.some((word) => name.includes(word))) {
-    return 16;
-  }
-
-  return 64;
-}
-
-/* =========================================
-   CATALOG IMPORT: NORMALIZE PRODUCT
-========================================= */
-
 function normalizeImportedProduct(raw) {
-  if (!raw || typeof raw !== "object") {
-    return null;
-  }
-
   const name = String(
-    raw.name ||
-    raw.title ||
-    raw.displayName ||
-    raw.display_name ||
-    raw.translation_key ||
-    raw.id ||
-    raw.item ||
-    ""
+    raw.name || raw.title || raw.item || ""
   ).trim();
 
   if (!name) return null;
 
-  const normalizedName = name
-    .replace(/^minecraft:/i, "")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const validCategories = [
+    "Blocks",
+    "Items",
+    "Armor & Weapons",
+    "Enchantments"
+  ];
 
-  if (!normalizedName) return null;
+  const requestedCategory = String(
+    raw.category || "Items"
+  ).trim();
 
-  if (normalizedName.toLowerCase() === "air") {
-    return null;
-  }
+  const category = validCategories.includes(requestedCategory)
+    ? requestedCategory
+    : "Items";
+
+  const stackSize = Number(
+    raw.stack_size || raw.stackSize || 64
+  );
 
   return {
-    name: normalizedName,
-    category: detectImportedCategory(raw),
-    description: "Minecraft item",
+    name,
+    category,
+    description: String(raw.description || ""),
     price: 0,
-    stack_size: detectImportedStackSize(raw),
+    stack_size: [1, 16, 64].includes(stackSize)
+      ? stackSize
+      : 64,
     discount_percent: 0,
     is_active: false
   };
 }
 
-/* =========================================
-   CATALOG IMPORT: REGISTRY JSON
-========================================= */
-
-function extractRegistryProducts(data) {
-  if (Array.isArray(data)) {
-    return data;
-  }
-
-  if (!data || typeof data !== "object") {
-    return [];
-  }
-
-  if (Array.isArray(data.items)) {
-    return data.items;
-  }
-
-  if (Array.isArray(data.entries)) {
-    return data.entries;
-  }
-
-  if (Array.isArray(data.item_components)) {
-    const components = data.item_components;
-
-    const survivalEntries =
-      data.item_lists?.filtered_by_survival_obtained?.entries;
-
-    if (Array.isArray(survivalEntries)) {
-      const survivalIds = new Set(
-        survivalEntries.map((entry) => {
-          if (typeof entry === "string") return entry;
-
-          return entry.id || entry.item || entry.name || "";
-        })
-      );
-
-      return components.filter((item) => {
-        const id = item.id || item.name || item.translation_key;
-
-        return survivalIds.has(id);
-      });
-    }
-
-    return components.filter((item) => {
-      const obtained = item.obtained_via?.gamemode_survival;
-
-      return obtained === true || obtained === 1;
-    });
-  }
-
-  if (data.items && typeof data.items === "object") {
-    return Object.entries(data.items).map(([id, item]) => ({
-      id,
-      ...item
-    }));
-  }
-
-  return [];
-}
-
-/* =========================================
-   CATALOG IMPORT: DUPLICATE CHECK
-========================================= */
-
-function normalizeProductKey(name) {
-  return String(name || "")
-    .toLowerCase()
-    .replace(/^minecraft:/, "")
-    .replace(/_/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-async function importProducts(productsToImport) {
-  if (!isAdmin) {
-    throw new Error("Admin permissions required.");
-  }
-
-  const normalizedProducts = productsToImport
-    .map(normalizeImportedProduct)
-    .filter(Boolean);
-
-  if (!normalizedProducts.length) {
-    return {
-      imported: 0,
-      skipped: 0,
-      total: 0
-    };
-  }
-
-  const uniqueProducts = [];
-  const seenNames = new Set();
-
-  for (const product of normalizedProducts) {
-    const key = normalizeProductKey(product.name);
-
-    if (seenNames.has(key)) continue;
-
-    seenNames.add(key);
-    uniqueProducts.push(product);
-  }
-
-  const existingNames = new Set(
-    catalogCache.map((product) =>
-      normalizeProductKey(product.name)
-    )
-  );
-
-  const candidates = uniqueProducts.filter((product) => {
-    return !existingNames.has(normalizeProductKey(product.name));
-  });
-
-  if (!candidates.length) {
-    return {
-      imported: 0,
-      skipped: uniqueProducts.length,
-      total: uniqueProducts.length
-    };
-  }
-
-  let importedCount = 0;
-
-  const batchSize = 100;
-
-  for (let index = 0; index < candidates.length; index += batchSize) {
-    const batch = candidates.slice(index, index + batchSize);
-
-    const { data, error } = await supabaseClient
-      .from("products")
-      .insert(batch)
-      .select("id");
-
-    if (error) {
-      throw error;
-    }
-
-    importedCount += data?.length || batch.length;
-  }
-
-  return {
-    imported: importedCount,
-    skipped: uniqueProducts.length - importedCount,
-    total: uniqueProducts.length
-  };
-}
-
-/* =========================================
-   CATALOG IMPORT: FILE HANDLER
-========================================= */
-
 async function importCatalogFile(file) {
-  if (!isAdmin) {
-    showToast("Admin permissions required.", "error");
-    return;
-  }
-
-  if (!file) return;
-
-  const fileName = file.name.toLowerCase();
-
-  if (!fileName.endsWith(".json") && !fileName.endsWith(".csv")) {
-    showToast("Please select a JSON or CSV file.", "error");
-    return;
-  }
+  if (!isAdmin || !file) return;
 
   try {
-    showToast("Reading import file...", "info");
-
     const text = await file.text();
 
-    let rawProducts = [];
+    let imported;
 
-    if (fileName.endsWith(".json")) {
-      const json = JSON.parse(text);
-      rawProducts = extractRegistryProducts(json);
+    if (file.name.toLowerCase().endsWith(".json")) {
+      imported = JSON.parse(text);
+    } else if (file.name.toLowerCase().endsWith(".csv")) {
+      imported = parseCatalogCSV(text);
     } else {
-      rawProducts = parseCatalogCSV(text);
+      throw new Error("Please select a JSON or CSV file.");
     }
 
-    if (!rawProducts.length) {
-      showToast("No valid products found in this file.", "error");
+    if (!Array.isArray(imported)) {
+      throw new Error("The import file must contain a product array.");
+    }
+
+    const normalized = imported
+      .map(normalizeImportedProduct)
+      .filter(Boolean);
+
+    if (!normalized.length) {
+      throw new Error("No valid products were found.");
+    }
+
+    const uniqueProducts = [
+      ...new Map(
+        normalized.map(product => [
+          product.name.toLowerCase(),
+          product
+        ])
+      ).values()
+    ];
+
+    const confirmed = confirm(
+      `Import ${uniqueProducts.length} products?\n\n` +
+      "All imported products will be inactive and have no price."
+    );
+
+    if (!confirmed) return;
+
+    const { data: existing, error: lookupError } =
+      await supabaseClient
+        .from("products")
+        .select("name");
+
+    if (lookupError) throw lookupError;
+
+    const existingNames = new Set(
+      (existing || []).map(product =>
+        String(product.name).toLowerCase()
+      )
+    );
+
+    const newProducts = uniqueProducts.filter(product =>
+      !existingNames.has(product.name.toLowerCase())
+    );
+
+    if (!newProducts.length) {
+      showToast("All products already exist.", "error");
       return;
     }
 
-    showToast(
-      `Importing ${rawProducts.length} entries...`,
-      "info"
-    );
+    const { error } = await supabaseClient
+      .from("products")
+      .insert(newProducts);
 
-    const result = await importProducts(rawProducts);
+    if (error) throw error;
+
+    showToast(`${newProducts.length} products imported.`);
 
     await loadCatalogProducts();
     await loadProducts();
 
-    showToast(
-      `Import complete: ${result.imported} added, ${result.skipped} skipped.`,
-      "success"
-    );
-
-    console.log("Catalog import result:", result);
   } catch (error) {
-    console.error("Catalog import failed:", error);
+    console.error("Import error:", error);
 
     showToast(
-      error.message || "Could not import catalogue.",
+      `Import failed: ${error.message}`,
       "error"
     );
-  } finally {
-    const input = $("catalog-import-file");
-
-    if (input) {
-      input.value = "";
-    }
   }
 }
 
-/* =========================================
-   CATALOG IMPORT INPUT
-========================================= */
+if ($("catalog-import-file")) {
+  $("catalog-import-file").addEventListener(
+    "change",
+    event => {
+      const file = event.target.files?.[0];
 
-const catalogImportInput = $("catalog-import-file");
+      if (file) {
+        importCatalogFile(file);
+      }
 
-if (catalogImportInput) {
-  catalogImportInput.addEventListener("change", (event) => {
-    const file = event.target.files?.[0];
-
-    if (file) {
-      importCatalogFile(file);
+      event.target.value = "";
     }
-  });
+  );
 }
 
 /* =========================================
@@ -2108,18 +2719,27 @@ if (catalogImportInput) {
 async function initializeShop() {
   try {
     await loadSession();
+
     await loadProducts();
+
+    renderCart();
+
+    showCategory("All");
 
     if (currentSession && isAdmin) {
       await loadRequests();
       await loadCatalogProducts();
     }
 
-    renderCart();
+    console.log("Brat Ltd. shop initialized.");
 
-    showCategory("All");
   } catch (error) {
     console.error("Shop initialization failed:", error);
+
+    showToast(
+      "The shop could not be initialized.",
+      "error"
+    );
   }
 }
 
@@ -2128,7 +2748,11 @@ async function initializeShop() {
 ========================================= */
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initializeShop);
+  document.addEventListener(
+    "DOMContentLoaded",
+    initializeShop,
+    { once: true }
+  );
 } else {
   initializeShop();
 }
