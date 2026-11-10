@@ -1,3 +1,4 @@
+
 const supabaseClient = window.supabase.createClient(
   window.SUPABASE_URL,
   window.SUPABASE_KEY
@@ -11,6 +12,7 @@ let isAdmin = false;
 let requests = [];
 let currentRequestFilter = "all";
 let editingProductId = null;
+let catalogCache = [];
 
 /* =========================================
    HELPERS
@@ -27,7 +29,8 @@ const escapeHTML = value =>
     "'": "&#039;"
   })[char]);
 
-const roundMoney = value => Math.ceil(Number(value || 0));
+const roundMoney = value =>
+  Math.ceil(Number(value || 0));
 
 const money = value =>
   `${Number(value || 0).toLocaleString("en-US", {
@@ -45,22 +48,23 @@ const setText = (id, value) => {
 
 const formatDate = value => {
   if (!value) return "Not specified";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleDateString("en-GB");
-};
 
-const formatDateOnly = value => {
-  if (!value) return "Not specified";
-  const parts = String(value).split("-");
-  if (parts.length !== 3) return escapeHTML(value);
-  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return date.toLocaleDateString("en-GB");
 };
 
 const safeExternalUrl = value => {
   try {
     const url = new URL(value);
-    return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+
+    return ["http:", "https:"].includes(url.protocol)
+      ? url.href
+      : null;
   } catch {
     return null;
   }
@@ -95,6 +99,7 @@ const textureAliases = {
 
 function getTextureName(name) {
   const alias = textureAliases[name];
+
   if (alias) return alias;
 
   return String(name || "")
@@ -118,6 +123,7 @@ function imageMarkup(product, className = "product-image") {
       class="${className}"
       src="${productImage(product)}"
       alt="${escapeHTML(product.name)}"
+      loading="lazy"
       onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
     >
     <div class="fallback-icon" style="display:none;">▦</div>
@@ -129,7 +135,10 @@ function imageMarkup(product, className = "product-image") {
 ========================================= */
 
 function getManualDiscount(product) {
-  return Math.max(0, Math.min(90, Number(product.discount_percent || 0)));
+  return Math.max(
+    0,
+    Math.min(90, Number(product.discount_percent || 0))
+  );
 }
 
 function getSalePrice(product) {
@@ -141,11 +150,8 @@ function getDiscountPercent(quantity) {
   if (quantity >= 16) return 15;
   if (quantity >= 10) return 10;
   if (quantity >= 6) return 5;
-  return 0;
-}
 
-function unitPrice(product) {
-  return Number(product.price) / 64;
+  return 0;
 }
 
 function stackText(product) {
@@ -153,11 +159,9 @@ function stackText(product) {
   return `${size} items per stack`;
 }
 
-/*
-  IMPORTANT:
-  Service budgets are now included in the cart total.
-  Quantity and product discounts only apply to normal products.
-*/
+/* =========================================
+   CART TOTALS
+========================================= */
 
 function getCartTotals() {
   let original = 0;
@@ -184,49 +188,27 @@ function getCartTotals() {
     }
 
     const stacks = Number(quantity);
-    const stackPrice = Number(product.price);
+    const stackPrice = Number(product.price || 0);
     const salePrice = getSalePrice(product);
+    const quantityDiscount = getDiscountPercent(stacks);
 
     original += stackPrice * stacks;
     afterManual += salePrice * stacks;
 
-    const quantityDiscount = getDiscountPercent(stacks);
-
     afterQuantity +=
-      salePrice * stacks * (1 - quantityDiscount / 100);
+      salePrice * stacks *
+      (1 - quantityDiscount / 100);
   }
 
   const manualSavings = original - afterManual;
-
-  let normalProductManualSavings = 0;
-  let normalProductQuantitySavings = 0;
-
-  for (const [id, quantity] of Object.entries(cart)) {
-    const product = products.find(
-      item => String(item.id) === String(id)
-    );
-
-    if (!product || product.isService) continue;
-
-    const stacks = Number(quantity);
-    const salePrice = getSalePrice(product);
-
-    normalProductManualSavings +=
-      (Number(product.price) - salePrice) * stacks;
-
-    normalProductQuantitySavings +=
-      salePrice * stacks *
-      getDiscountPercent(stacks) / 100;
-  }
-
-  const quantitySavings = normalProductQuantitySavings;
-  const savings = normalProductManualSavings + quantitySavings;
+  const quantitySavings = afterManual - afterQuantity;
+  const savings = manualSavings + quantitySavings;
 
   return {
     original,
     afterManual,
     afterQuantity,
-    manualSavings: normalProductManualSavings,
+    manualSavings,
     quantitySavings,
     savings,
     serviceTotal,
@@ -234,6 +216,7 @@ function getCartTotals() {
     checkoutTotal: roundMoney(afterQuantity)
   };
 }
+
 /* =========================================
    PRODUCT LOADING
 ========================================= */
@@ -249,13 +232,17 @@ async function loadProducts() {
     console.error("Product loading error:", error);
 
     if ($("products")) {
-      $("products").innerHTML =
-        `<p class="error-message">Could not load products: ${escapeHTML(error.message)}</p>`;
+      $("products").innerHTML = `
+        <p class="error-message">
+          Could not load products: ${escapeHTML(error.message)}
+        </p>
+      `;
     }
 
     if ($("offers-grid")) {
-      $("offers-grid").innerHTML =
-        `<p class="error-message">Could not load offers.</p>`;
+      $("offers-grid").innerHTML = `
+        <p class="error-message">Could not load offers.</p>
+      `;
     }
 
     return;
@@ -265,7 +252,10 @@ async function loadProducts() {
     product => product.isService
   );
 
-  products = [...(data || []), ...serviceProducts];
+  products = [
+    ...(data || []),
+    ...serviceProducts
+  ];
 
   renderOffers();
   renderProducts();
@@ -277,6 +267,19 @@ async function loadProducts() {
 ========================================= */
 
 function showCategory(nextCategory) {
+  const validCategories = [
+    "All",
+    "Blocks",
+    "Items",
+    "Armor & Weapons",
+    "Enchantments",
+    "Services"
+  ];
+
+  if (!validCategories.includes(nextCategory)) {
+    nextCategory = "All";
+  }
+
   category = nextCategory;
 
   document.querySelectorAll(".nav-link").forEach(link => {
@@ -286,8 +289,13 @@ function showCategory(nextCategory) {
     );
   });
 
-  const requestsTab = document.querySelector("[data-requests-tab]");
-  if (requestsTab) requestsTab.classList.remove("active");
+  const requestsTab = document.querySelector(
+    "[data-requests-tab]"
+  );
+
+  if (requestsTab) {
+    requestsTab.classList.remove("active");
+  }
 
   if ($("offers")) {
     $("offers").style.display =
@@ -300,6 +308,7 @@ function showCategory(nextCategory) {
   }
 
   if ($("admin-section")) {
+    $("admin-section").hidden = true;
     $("admin-section").style.display = "none";
   }
 
@@ -312,16 +321,19 @@ function showCategory(nextCategory) {
   };
 
   setText("category-title", nextCategory);
+
   setText(
     "category-description",
-    descriptions[nextCategory] || "Browse available products."
+    descriptions[nextCategory] ||
+      "Browse available products."
   );
 
   renderProducts();
 
-  if (nextCategory === "Services") {
-    renderServiceForm();
-  }
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
 }
 
 document.querySelectorAll(".nav-link").forEach(link => {
@@ -337,18 +349,25 @@ document.querySelectorAll(".nav-link").forEach(link => {
 
 function renderOffers() {
   const container = $("offers-grid");
+
   if (!container) return;
 
-  const search = ($("search")?.value || "").toLowerCase();
+  const search = (
+    $("search")?.value || ""
+  ).toLowerCase();
 
-  const offers = products.filter(product =>
-    !product.isService &&
-    Number(product.discount_percent || 0) > 0 &&
-    (
-      product.name.toLowerCase().includes(search) ||
-      String(product.description || "").toLowerCase().includes(search)
-    )
-  );
+  const offers = products.filter(product => {
+    if (product.isService) return false;
+
+    const hasDiscount =
+      Number(product.discount_percent || 0) > 0;
+
+    const matchesSearch =
+      String(product.name || "").toLowerCase().includes(search) ||
+      String(product.description || "").toLowerCase().includes(search);
+
+    return hasDiscount && matchesSearch;
+  });
 
   if (!offers.length) {
     container.innerHTML = "";
@@ -365,20 +384,31 @@ function renderOffers() {
   }
 
   container.innerHTML = offers.map(product => {
-    const oldPrice = Number(product.price);
+    const oldPrice = Number(product.price || 0);
     const newPrice = getSalePrice(product);
 
     return `
       <article class="offer-card">
         <div class="offer-image">
-          <span class="offer-badge">-${getManualDiscount(product)}%</span>
+          <span class="offer-badge">
+            -${getManualDiscount(product)}%
+          </span>
+
           ${imageMarkup(product, "offer-product-image")}
         </div>
 
         <div class="offer-copy">
-          <div class="offer-kicker">${escapeHTML(product.category)}</div>
+          <div class="offer-kicker">
+            ${escapeHTML(product.category)}
+          </div>
+
           <h3>${escapeHTML(product.name)}</h3>
-          <p>${escapeHTML(product.description || "Available now at Brat Ltd.")}</p>
+
+          <p>
+            ${escapeHTML(
+              product.description || "Available now at Brat Ltd."
+            )}
+          </p>
 
           <div class="offer-prices">
             <span class="old-price">${money(oldPrice)}</span>
@@ -398,9 +428,9 @@ function renderOffers() {
   }).join("");
 
   container.querySelectorAll("[data-add]").forEach(button => {
-    button.addEventListener("click", () =>
-      addToCart(button.dataset.add)
-    );
+    button.addEventListener("click", () => {
+      addToCart(button.dataset.add);
+    });
   });
 }
 
@@ -409,14 +439,20 @@ function renderOffers() {
 ========================================= */
 
 function productPriceMarkup(product) {
-  const price = Number(product.price);
+  const price = Number(product.price || 0);
   const discount = getManualDiscount(product);
 
   if (discount > 0) {
     return `
       <span class="old-price">${money(price)}</span>
-      <span class="price">${money(getSalePrice(product))}</span>
-      <span class="product-discount-badge">-${discount}%</span>
+
+      <span class="price">
+        ${money(getSalePrice(product))}
+      </span>
+
+      <span class="product-discount-badge">
+        -${discount}%
+      </span>
     `;
   }
 
@@ -439,16 +475,30 @@ function adminProductButton(product) {
 
 function renderProducts() {
   const container = $("products");
+
   if (!container) return;
 
-  const search = ($("search")?.value || "").toLowerCase();
+  if (category === "Services") {
+    if ($("empty-products")) {
+      $("empty-products").style.display = "none";
+    }
+
+    renderServiceForm();
+    return;
+  }
+
+  const search = (
+    $("search")?.value || ""
+  ).toLowerCase();
 
   const filtered = products.filter(product => {
+    if (product.isService) return false;
+
     const matchesCategory =
-      !product.isService && product.category === category;
+      product.category === category;
 
     const matchesSearch =
-      product.name.toLowerCase().includes(search) ||
+      String(product.name || "").toLowerCase().includes(search) ||
       String(product.description || "").toLowerCase().includes(search);
 
     return matchesCategory && matchesSearch;
@@ -476,7 +526,10 @@ function renderProducts() {
       </div>
 
       <div class="product-info">
-        <div class="product-tag">${escapeHTML(product.category)}</div>
+        <div class="product-tag">
+          ${escapeHTML(product.category)}
+        </div>
+
         <h3>${escapeHTML(product.name)}</h3>
 
         <p class="product-description">
@@ -503,15 +556,21 @@ function renderProducts() {
   `).join("");
 
   container.querySelectorAll("[data-add]").forEach(button => {
-    button.addEventListener("click", () =>
-      addToCart(button.dataset.add)
-    );
+    button.addEventListener("click", () => {
+      addToCart(button.dataset.add);
+    });
   });
 
   container.querySelectorAll("[data-edit-product]").forEach(button => {
-    button.addEventListener("click", () =>
-      openProductEditor(button.dataset.editProduct)
-    );
+    button.addEventListener("click", () => {
+      const product = products.find(item =>
+        String(item.id) === String(button.dataset.editProduct)
+      );
+
+      if (product) {
+        openProductEditor(product);
+      }
+    });
   });
 }
 
@@ -525,55 +584,82 @@ if ($("search")) {
     renderProducts();
   });
 }
-/* =========================================
-   PRODUCT EDITOR BUTTONS
-========================================= */
-
-function attachProductEditorButtons(container = document) {
-  container.querySelectorAll("[data-edit-product]").forEach(button => {
-    button.addEventListener("click", () => {
-      const product = products.find(item =>
-        String(item.id) === String(button.dataset.editProduct)
-      );
-
-      if (product) openProductEditor(product);
-    });
-  });
-}
 
 /* =========================================
    PRODUCT EDITOR
 ========================================= */
 
-function openProductEditor(product) {
+function openProductEditor(productOrId) {
+  if (!isAdmin) return;
+
+  const product = typeof productOrId === "object"
+    ? productOrId
+    : products.find(item =>
+        String(item.id) === String(productOrId)
+      ) || catalogCache.find(item =>
+        String(item.id) === String(productOrId)
+      );
+
+  if (!product) {
+    showToast("Product not found.", "error");
+    return;
+  }
+
   editingProductId = product.id;
 
   const existing = $("product-editor-modal");
+
   if (existing) existing.remove();
 
   const modal = document.createElement("div");
+
   modal.id = "product-editor-modal";
   modal.className = "modal-backdrop show";
 
+  const categories = [
+    "Blocks",
+    "Items",
+    "Armor & Weapons",
+    "Enchantments"
+  ];
+
   modal.innerHTML = `
     <div class="modal product-editor-modal">
-      <button class="modal-close" id="close-product-editor" type="button">×</button>
+      <button
+        class="modal-close"
+        id="close-product-editor"
+        type="button"
+      >×</button>
 
       <div class="modal-eyebrow">PRODUCT MANAGEMENT</div>
-      <h2>Edit <span class="orange">product.</span></h2>
+
+      <h2>
+        Edit <span class="orange">product.</span>
+      </h2>
 
       <form id="product-editor-form">
         <label>Product name</label>
-        <input value="${escapeHTML(product.name)}" disabled>
+
+        <input
+          value="${escapeHTML(product.name)}"
+          disabled
+        >
 
         <label>Category</label>
+
         <select id="edit-product-category">
-          ${["Blocks", "Items", "Armor & Weapons", "Enchantments", "Services"].map(c =>
-            `<option value="${c}" ${product.category === c ? "selected" : ""}>${c}</option>`
-          ).join("")}
+          ${categories.map(item => `
+            <option
+              value="${item}"
+              ${product.category === item ? "selected" : ""}
+            >${item}</option>
+          `).join("")}
         </select>
 
-        <label>Price per stack (${Number(product.stack_size || 64)} items)</label>
+        <label>
+          Price per stack (${Number(product.stack_size || 64)} items)
+        </label>
+
         <input
           id="edit-product-price"
           type="number"
@@ -584,6 +670,7 @@ function openProductEditor(product) {
         >
 
         <label>Stack size (1–64)</label>
+
         <input
           id="edit-product-stack"
           type="number"
@@ -595,6 +682,7 @@ function openProductEditor(product) {
         >
 
         <label>Manual discount (%)</label>
+
         <input
           id="edit-product-discount"
           type="number"
@@ -614,7 +702,10 @@ function openProductEditor(product) {
           Active in public shop
         </label>
 
-        <button class="primary-button full-width" type="submit">
+        <button
+          class="primary-button full-width"
+          type="submit"
+        >
           Save changes
         </button>
 
@@ -625,52 +716,81 @@ function openProductEditor(product) {
 
   document.body.appendChild(modal);
 
-  $("close-product-editor").addEventListener("click", () => modal.remove());
-
-  $("product-editor-form").addEventListener("submit", async event => {
-    event.preventDefault();
-
-    const price = Number($("edit-product-price").value);
-    const discount = Number($("edit-product-discount").value);
-    const stackSize = Number($("edit-product-stack").value);
-
-    if (
-      !Number.isFinite(price) ||
-      price < 0 ||
-      discount < 0 ||
-      discount > 90 ||
-      !Number.isInteger(stackSize) ||
-      stackSize < 1 ||
-      stackSize > 64
-    ) {
-      setText("product-editor-message", "Please enter valid values.");
-      return;
-    }
-
-    const { error } = await supabaseClient
-      .from("products")
-      .update({
-        price,
-        discount_percent: discount,
-        stack_size: stackSize,
-        category: $("edit-product-category").value,
-        is_active: $("edit-product-active").checked
-      })
-      .eq("id", editingProductId);
-
-    if (error) {
-      setText("product-editor-message", error.message);
-      return;
-    }
-
+  $("close-product-editor").addEventListener("click", () => {
     modal.remove();
-    await loadProducts();
-    await loadCatalogProducts();
   });
+
+  modal.addEventListener("click", event => {
+    if (event.target === modal) {
+      modal.remove();
+    }
+  });
+
+  $("product-editor-form").addEventListener(
+    "submit",
+    async event => {
+      event.preventDefault();
+
+      const price = Number($("edit-product-price").value);
+      const discount = Number($("edit-product-discount").value);
+      const stackSize = Number($("edit-product-stack").value);
+
+      if (
+        !Number.isFinite(price) ||
+        price < 0 ||
+        !Number.isInteger(discount) ||
+        discount < 0 ||
+        discount > 90 ||
+        !Number.isInteger(stackSize) ||
+        stackSize < 1 ||
+        stackSize > 64
+      ) {
+        setText(
+          "product-editor-message",
+          "Please enter valid values."
+        );
+        return;
+      }
+
+      const saveButton = $("product-editor-form")
+        .querySelector('button[type="submit"]');
+
+      saveButton.disabled = true;
+      saveButton.textContent = "Saving...";
+
+      const { error } = await supabaseClient
+        .from("products")
+        .update({
+          price,
+          discount_percent: discount,
+          stack_size: stackSize,
+          category: $("edit-product-category").value,
+          is_active: $("edit-product-active").checked
+        })
+        .eq("id", editingProductId);
+
+      if (error) {
+        setText("product-editor-message", error.message);
+        saveButton.disabled = false;
+        saveButton.textContent = "Save changes";
+        return;
+      }
+
+      modal.remove();
+
+      showToast("Product updated successfully.");
+
+      await loadProducts();
+
+      if (isAdmin) {
+        await loadCatalogProducts();
+      }
+    }
+  );
 }
 
 /* =========================================
-   CART
+   CART STORAGE
 ========================================= */
 
 function saveCart() {
@@ -682,13 +802,15 @@ function addToCart(id) {
     item => String(item.id) === String(id)
   );
 
-  if (!product) return;
+  if (!product || product.isService) return;
 
   cart[id] = Number(cart[id] || 0) + 1;
 
   saveCart();
   renderCart();
   openCart();
+
+  showToast(`${product.name} added to cart.`);
 }
 
 function changeQuantity(id, change) {
@@ -704,13 +826,20 @@ function changeQuantity(id, change) {
   renderCart();
 }
 
+/* =========================================
+   CART DISPLAY
+========================================= */
+
 function renderCart() {
   const container = $("cart-items");
+
   if (!container) return;
 
   const entries = Object.entries(cart).filter(([id, quantity]) =>
     Number(quantity) > 0 &&
-    products.some(item => String(item.id) === String(id))
+    products.some(item =>
+      String(item.id) === String(id)
+    )
   );
 
   const count = entries.reduce(
@@ -729,7 +858,12 @@ function renderCart() {
     `;
 
     if ($("cart-total")) {
-      $("cart-total").innerHTML = "";
+      $("cart-total").innerHTML = `
+        <div class="total-line grand-total">
+          <span>Total</span>
+          <strong>0 KB$</strong>
+        </div>
+      `;
     }
 
     return;
@@ -740,49 +874,16 @@ function renderCart() {
       item => String(item.id) === String(id)
     );
 
-    if (product.isService) {
-      const hasBudget =
-        product.desiredPrice !== null &&
-        product.desiredPrice !== undefined &&
-        Number(product.desiredPrice) > 0;
-
-      return `
-        <div class="cart-item">
-          <div class="cart-item-image">◈</div>
-
-          <div class="cart-item-details">
-            <h3>${escapeHTML(product.name)}</h3>
-
-            <div class="cart-item-price">
-              ${hasBudget
-                ? `Service budget: ${money(product.desiredPrice)}`
-                : "No budget specified"}
-            </div>
-
-            <div class="discount-note">
-              ${hasBudget
-                ? "Proposed service price – included in your order total"
-                : "The service can still be ordered without a budget"}
-            </div>
-
-            <button
-              class="remove-service"
-              data-remove-service="${escapeHTML(id)}"
-              type="button"
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      `;
-    }
+    if (!product) return "";
 
     const stacks = Number(quantity);
     const discount = getDiscountPercent(stacks);
     const manualDiscount = getManualDiscount(product);
 
     const finalPrice =
-      getSalePrice(product) * stacks * (1 - discount / 100);
+      getSalePrice(product) *
+      stacks *
+      (1 - discount / 100);
 
     return `
       <div class="cart-item">
@@ -792,21 +893,29 @@ function renderCart() {
 
         <div class="cart-item-details">
           <h3>${escapeHTML(product.name)}</h3>
-          <div class="cart-item-price">${money(finalPrice)}</div>
 
-          ${manualDiscount > 0
-            ? `<div class="discount-note">Product discount: ${manualDiscount}%</div>`
-            : ""}
+          <div class="cart-item-price">
+            ${money(finalPrice)}
+          </div>
 
-          ${discount > 0
-            ? `<div class="discount-note">Quantity discount: ${discount}%</div>`
-            : ""}
+          ${manualDiscount > 0 ? `
+            <div class="discount-note">
+              Product discount: ${manualDiscount}%
+            </div>
+          ` : ""}
+
+          ${discount > 0 ? `
+            <div class="discount-note">
+              Quantity discount: ${discount}%
+            </div>
+          ` : ""}
 
           <div class="quantity-controls">
             <button
               data-quantity="${escapeHTML(id)}"
               data-change="-1"
               type="button"
+              aria-label="Decrease quantity"
             >−</button>
 
             <span>${stacks}</span>
@@ -815,6 +924,7 @@ function renderCart() {
               data-quantity="${escapeHTML(id)}"
               data-change="1"
               type="button"
+              aria-label="Increase quantity"
             >+</button>
           </div>
         </div>
@@ -831,49 +941,37 @@ function renderCart() {
     });
   });
 
-  container.querySelectorAll("[data-remove-service]").forEach(button => {
-    button.addEventListener("click", () => {
-      const id = button.dataset.removeService;
-
-      delete cart[id];
-
-      products = products.filter(item =>
-        String(item.id) !== String(id)
-      );
-
-      saveCart();
-      renderCart();
-    });
-  });
-
   const totals = getCartTotals();
 
-  $("cart-total").innerHTML = `
-    <div class="total-line">
-      <span>Subtotal</span>
-      <span>${money(totals.original)}</span>
-    </div>
-
-    ${totals.manualSavings > 0 ? `
-      <div class="total-line discount-line">
-        <span>Product discounts</span>
-        <span>-${money(totals.manualSavings)}</span>
+  if ($("cart-total")) {
+    $("cart-total").innerHTML = `
+      <div class="total-line">
+        <span>Subtotal</span>
+        <span>${money(totals.original)}</span>
       </div>
-    ` : ""}
 
-    ${totals.quantitySavings > 0 ? `
-      <div class="total-line discount-line">
-        <span>Quantity discounts</span>
-        <span>-${money(totals.quantitySavings)}</span>
+      ${totals.manualSavings > 0 ? `
+        <div class="total-line discount-line">
+          <span>Product discounts</span>
+          <span>-${money(totals.manualSavings)}</span>
+        </div>
+      ` : ""}
+
+      ${totals.quantitySavings > 0 ? `
+        <div class="total-line discount-line">
+          <span>Quantity discounts</span>
+          <span>-${money(totals.quantitySavings)}</span>
+        </div>
+      ` : ""}
+
+      <div class="total-line grand-total">
+        <span>Total</span>
+        <strong>${checkoutMoney(totals.total)}</strong>
       </div>
-    ` : ""}
-
-    <div class="total-line grand-total">
-      <span>Total</span>
-      <strong>${checkoutMoney(totals.total)}</strong>
-    </div>
-  `;
+    `;
+  }
 }
+
 /* =========================================
    CART OPEN / CLOSE
 ========================================= */
@@ -917,11 +1015,20 @@ if ($("cart-overlay")) {
 function openCheckout() {
   const entries = Object.entries(cart).filter(([id, quantity]) =>
     Number(quantity) > 0 &&
-    products.some(product => String(product.id) === String(id))
+    products.some(product =>
+      String(product.id) === String(id)
+    )
   );
 
   if (!entries.length) {
     showToast("Your cart is empty.", "error");
+    return;
+  }
+
+  if (!currentSession) {
+    showToast("Please log in before checkout.", "error");
+    closeCart();
+    openLogin();
     return;
   }
 
@@ -934,11 +1041,16 @@ function openCheckout() {
 
   const totals = getCartTotals();
 
+  const totalStacks = entries.reduce(
+    (sum, [, quantity]) => sum + Number(quantity),
+    0
+  );
+
   if ($("checkout-summary")) {
     $("checkout-summary").innerHTML = `
       <div class="checkout-summary-row">
-        <span>Items in cart</span>
-        <strong>${entries.length}</strong>
+        <span>Stacks in cart</span>
+        <strong>${totalStacks}</strong>
       </div>
 
       <div class="checkout-summary-row">
@@ -959,6 +1071,7 @@ function openCheckout() {
   }
 
   closeCart();
+
   modal.classList.add("active");
   document.body.style.overflow = "hidden";
 }
@@ -966,7 +1079,9 @@ function openCheckout() {
 function closeCheckout() {
   const modal = $("checkout-modal");
 
-  if (modal) modal.classList.remove("active");
+  if (modal) {
+    modal.classList.remove("active");
+  }
 
   document.body.style.overflow = "";
 }
@@ -979,16 +1094,31 @@ if ($("checkout-close")) {
   $("checkout-close").addEventListener("click", closeCheckout);
 }
 
+if ($("checkout-modal")) {
+  $("checkout-modal").addEventListener("click", event => {
+    if (event.target === $("checkout-modal")) {
+      closeCheckout();
+    }
+  });
+}
+
 /* =========================================
    CHECKOUT FORM
 ========================================= */
 
 function getCheckoutValues() {
   return {
-    minecraftName: $("checkout-minecraft-name")?.value.trim() || "",
-    district: $("checkout-district")?.value.trim() || "",
-    address: $("checkout-address")?.value.trim() || "",
-    note: $("checkout-note")?.value.trim() || ""
+    minecraftName:
+      $("checkout-minecraft-name")?.value.trim() || "",
+
+    district:
+      $("checkout-district")?.value.trim() || "",
+
+    address:
+      $("checkout-address")?.value.trim() || "",
+
+    note:
+      $("checkout-note")?.value.trim() || ""
   };
 }
 
@@ -1020,21 +1150,12 @@ function buildOrderItems() {
         item => String(item.id) === String(id)
       );
 
-      if (!product) return null;
-
-      if (product.isService) {
-        return {
-          id: product.id,
-          name: product.name,
-          type: "service",
-          quantity: 1,
-          desired_price: Number(product.desiredPrice || 0),
-          description: product.description || ""
-        };
+      if (!product || product.isService) {
+        return null;
       }
 
       const stacks = Number(quantity);
-      const stackPrice = Number(product.price);
+      const stackPrice = Number(product.price || 0);
       const manualDiscount = getManualDiscount(product);
       const quantityDiscount = getDiscountPercent(stacks);
 
@@ -1042,7 +1163,8 @@ function buildOrderItems() {
         stackPrice * (1 - manualDiscount / 100);
 
       const finalPrice =
-        priceAfterManual * stacks *
+        priceAfterManual *
+        stacks *
         (1 - quantityDiscount / 100);
 
       return {
@@ -1072,10 +1194,12 @@ function showToast(message, type = "success") {
     container = document.createElement("div");
     container.id = "toast-container";
     container.className = "toast-container";
+
     document.body.appendChild(container);
   }
 
   const toast = document.createElement("div");
+
   toast.className = `toast ${type}`;
   toast.textContent = message;
 
@@ -1089,15 +1213,18 @@ function showToast(message, type = "success") {
     }
   }, 3500);
 }
+
 /* =========================================
-   PLACE ORDER
+   PLACE PRODUCT ORDER
 ========================================= */
 
 async function placeOrder(event) {
-  if (event) event.preventDefault();
+  event.preventDefault();
 
   if (!currentSession) {
     showToast("Please log in before placing an order.", "error");
+    closeCheckout();
+    openLogin();
     return;
   }
 
@@ -1117,7 +1244,6 @@ async function placeOrder(event) {
   }
 
   const totals = getCartTotals();
-
   const button = $("place-order-button");
 
   if (button) {
@@ -1126,17 +1252,12 @@ async function placeOrder(event) {
   }
 
   const orderData = {
-    request_type: orderItems.some(item => item.type === "service")
-      ? "mixed"
-      : "product",
+    request_type: "product",
     items: orderItems,
-    description: orderItems
-      .filter(item => item.type === "service")
-      .map(item => item.description)
-      .join("\n"),
+    description: "",
     links: [],
     image_urls: [],
-    desired_price: totals.serviceTotal,
+    desired_price: null,
     subtotal: totals.original,
     discount_amount: totals.savings,
     total: totals.checkoutTotal,
@@ -1148,34 +1269,39 @@ async function placeOrder(event) {
     delivery_address: values.address
   };
 
-  const { error } = await supabaseClient
-    .from("orders")
-    .insert(orderData);
+  try {
+    const { error } = await supabaseClient
+      .from("orders")
+      .insert(orderData);
 
-  if (button) {
-    button.disabled = false;
-    button.textContent = "Place order";
-  }
+    if (error) throw error;
 
-  if (error) {
+    cart = {};
+    saveCart();
+    renderCart();
+
+    closeCheckout();
+
+    if ($("checkout-form")) {
+      $("checkout-form").reset();
+    }
+
+    showToast("Your order has been submitted successfully.");
+
+  } catch (error) {
     console.error("Order error:", error);
-    showToast(`Could not place order: ${error.message}`, "error");
-    return;
+
+    showToast(
+      `Could not place order: ${error.message}`,
+      "error"
+    );
+
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Place order";
+    }
   }
-
-  cart = {};
-  saveCart();
-  renderCart();
-
-  closeCheckout();
-
-  if ($("checkout-form")) {
-    $("checkout-form").reset();
-  }
-
-  showToast("Your order has been submitted successfully.");
-
-  await loadRequests();
 }
 
 if ($("checkout-form")) {
@@ -1194,9 +1320,15 @@ function renderServiceForm() {
   if ($("service-request-form")) return;
 
   container.innerHTML = `
-    <div class="service-request-card" id="service-request-form">
+    <div
+      class="service-request-card"
+      id="service-request-form"
+    >
       <div class="eyebrow">BRAT LTD. SERVICES</div>
-      <h2>Request a <span class="orange">custom service.</span></h2>
+
+      <h2>
+        Request a <span class="orange">custom service.</span>
+      </h2>
 
       <p>
         Tell us what you need. Our team will review your request
@@ -1205,6 +1337,7 @@ function renderServiceForm() {
 
       <form id="service-form">
         <label for="service-title">Service title</label>
+
         <input
           id="service-title"
           type="text"
@@ -1213,7 +1346,18 @@ function renderServiceForm() {
           required
         >
 
+        <label for="service-player">Minecraft username</label>
+
+        <input
+          id="service-player"
+          type="text"
+          maxlength="32"
+          placeholder="Your Minecraft username"
+          required
+        >
+
         <label for="service-description">Description</label>
+
         <textarea
           id="service-description"
           maxlength="3000"
@@ -1224,6 +1368,7 @@ function renderServiceForm() {
         <div class="form-row">
           <div>
             <label for="service-budget">Budget (KB$)</label>
+
             <input
               id="service-budget"
               type="number"
@@ -1235,33 +1380,40 @@ function renderServiceForm() {
 
           <div>
             <label for="service-deadline">Desired deadline</label>
+
             <input
               id="service-deadline"
               type="date"
+              min="${new Date().toISOString().split("T")[0]}"
             >
           </div>
         </div>
 
         <label for="service-links">Reference links</label>
+
         <textarea
           id="service-links"
           maxlength="1500"
-          placeholder="Add links to images or examples..."
+          placeholder="Add one link per line..."
         ></textarea>
 
         <label for="service-images">Reference images</label>
+
         <input
           id="service-images"
           type="file"
-          accept="image/*"
+          accept="image/png,image/jpeg,image/webp"
           multiple
         >
 
         <p class="form-hint">
-          You can upload up to 5 images.
+          You can upload up to 5 images. Maximum 5 MB per image.
         </p>
 
-        <button class="primary-button full-width" type="submit">
+        <button
+          class="primary-button full-width"
+          type="submit"
+        >
           Submit service request
         </button>
 
@@ -1270,7 +1422,10 @@ function renderServiceForm() {
     </div>
   `;
 
-  $("service-form").addEventListener("submit", submitServiceRequest);
+  $("service-form").addEventListener(
+    "submit",
+    submitServiceRequest
+  );
 }
 
 /* =========================================
@@ -1279,11 +1434,21 @@ function renderServiceForm() {
 
 async function uploadServiceImages(files) {
   const uploadedUrls = [];
-  const selectedFiles = Array.from(files || []).slice(0, 5);
+  const selectedFiles = Array.from(files || []);
+
+  if (selectedFiles.length > 5) {
+    throw new Error("You can upload a maximum of 5 images.");
+  }
 
   for (const file of selectedFiles) {
-    if (!file.type.startsWith("image/")) {
-      throw new Error("Only image files are allowed.");
+    const allowedTypes = [
+      "image/png",
+      "image/jpeg",
+      "image/webp"
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error("Only PNG, JPG and WEBP images are allowed.");
     }
 
     if (file.size > 5 * 1024 * 1024) {
@@ -1293,7 +1458,7 @@ async function uploadServiceImages(files) {
     const extension = file.name.split(".").pop() || "png";
 
     const fileName =
-      `${currentSession.user.id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+      `${currentSession.user.id}/${crypto.randomUUID()}.${extension}`;
 
     const { error } = await supabaseClient.storage
       .from("service-attachments")
@@ -1323,37 +1488,55 @@ async function submitServiceRequest(event) {
 
   if (!currentSession) {
     showToast("Please log in before submitting a request.", "error");
+    openLogin();
     return;
   }
 
   const title = $("service-title").value.trim();
+  const minecraftName = $("service-player").value.trim();
   const description = $("service-description").value.trim();
-  const budgetValue = $("service-budget").value;
+  const budgetValue = $("service-budget").value.trim();
   const deadline = $("service-deadline").value || null;
 
-  const links = $("service-links").value
+  const rawLinks = $("service-links").value
     .split("\n")
     .map(value => value.trim())
-    .filter(Boolean)
-    .filter(value => safeExternalUrl(value));
+    .filter(Boolean);
 
   const files = $("service-images").files;
 
-  if (!title || !description) {
+  if (!title || !minecraftName || !description) {
     showToast("Please complete all required fields.", "error");
     return;
   }
 
-  if (budgetValue && Number(budgetValue) < 0) {
+  if (
+    budgetValue !== "" &&
+    (!Number.isFinite(Number(budgetValue)) ||
+      Number(budgetValue) < 0)
+  ) {
     showToast("Please enter a valid budget.", "error");
     return;
+  }
+
+  const links = [];
+
+  for (const link of rawLinks) {
+    const safeLink = safeExternalUrl(link);
+
+    if (!safeLink) {
+      showToast(`Invalid reference link: ${link}`, "error");
+      return;
+    }
+
+    links.push(safeLink);
   }
 
   const button = event.submitter;
 
   if (button) {
     button.disabled = true;
-    button.textContent = "Uploading...";
+    button.textContent = "Submitting...";
   }
 
   try {
@@ -1378,7 +1561,7 @@ async function submitServiceRequest(event) {
       discount_amount: 0,
       total: desiredPrice || 0,
       status: "pending",
-      minecraft_name: currentSession.user.user_metadata?.minecraft_name || "",
+      minecraft_name: minecraftName,
       note: "",
       user_id: currentSession.user.id,
       due_date: deadline
@@ -1394,11 +1577,13 @@ async function submitServiceRequest(event) {
 
     showToast("Your service request has been submitted.");
 
-    await loadRequests();
-
   } catch (error) {
     console.error("Service request error:", error);
-    showToast(`Request failed: ${error.message}`, "error");
+
+    showToast(
+      `Request failed: ${error.message}`,
+      "error"
+    );
 
   } finally {
     if (button) {
@@ -1407,6 +1592,7 @@ async function submitServiceRequest(event) {
     }
   }
 }
+
 /* =========================================
    AUTHENTICATION
 ========================================= */
@@ -1428,19 +1614,27 @@ async function loadSession() {
 
   if (currentSession) {
     await checkAdminRole();
+  } else {
+    isAdmin = false;
   }
 }
+
+/* =========================================
+   AUTH UI
+========================================= */
 
 async function updateAuthUI() {
   const loginButton = $("login-button");
   const accountButton = $("account-button");
   const logoutButton = $("logout-button");
   const userLabel = $("user-label");
+  const adminButton = $("admin-button");
 
   if (currentSession) {
     const username =
       currentSession.user.user_metadata?.minecraft_name ||
-      currentSession.user.email;
+      currentSession.user.email ||
+      "Account";
 
     if (loginButton) loginButton.hidden = true;
     if (accountButton) accountButton.hidden = false;
@@ -1459,6 +1653,10 @@ async function updateAuthUI() {
       userLabel.textContent = "";
     }
 
+    if (adminButton) {
+      adminButton.hidden = true;
+    }
+
     isAdmin = false;
   }
 }
@@ -1470,9 +1668,12 @@ async function updateAuthUI() {
 function openLogin() {
   const modal = $("login-modal");
 
-  if (modal) {
-    modal.classList.add("show");
+  if (!modal) {
+    showToast("Login is currently unavailable.", "error");
+    return;
   }
+
+  modal.classList.add("show");
 }
 
 function closeLogin() {
@@ -1506,40 +1707,54 @@ if ($("login-modal")) {
 async function signIn(event) {
   event.preventDefault();
 
-  const email = $("login-email").value.trim();
-  const password = $("login-password").value;
-
+  const email = $("login-email")?.value.trim() || "";
+  const password = $("login-password")?.value || "";
   const message = $("login-message");
+  const button = $("login-form")?.querySelector(
+    'button[type="submit"]'
+  );
 
   if (message) {
     message.textContent = "Signing in...";
   }
 
-  const { data, error } = await supabaseClient.auth
-    .signInWithPassword({
-      email,
-      password
-    });
+  if (button) {
+    button.disabled = true;
+  }
 
-  if (error) {
+  try {
+    const { data, error } = await supabaseClient.auth
+      .signInWithPassword({
+        email,
+        password
+      });
+
+    if (error) throw error;
+
+    currentSession = data.session;
+
+    await updateAuthUI();
+    await checkAdminRole();
+
+    closeLogin();
+
+    showToast("Successfully signed in.");
+
+    if ($("login-form")) {
+      $("login-form").reset();
+    }
+
+  } catch (error) {
+    console.error("Sign in error:", error);
+
     if (message) {
       message.textContent = error.message;
     }
 
-    return;
-  }
-
-  currentSession = data.session;
-
-  await updateAuthUI();
-  await checkAdminRole();
-
-  closeLogin();
-
-  showToast("Successfully signed in.");
-
-  if ($("login-form")) {
-    $("login-form").reset();
+  } finally {
+    if (button) {
+      button.disabled = false;
+    }
   }
 }
 
@@ -1561,9 +1776,12 @@ async function signOut() {
 
   currentSession = null;
   isAdmin = false;
+  requests = [];
+  catalogCache = [];
 
   await updateAuthUI();
 
+  closeAdmin();
   showCategory("All");
 
   showToast("You have been signed out.");
@@ -1574,12 +1792,33 @@ if ($("logout-button")) {
 }
 
 /* =========================================
+   ACCOUNT BUTTON
+========================================= */
+
+if ($("account-button")) {
+  $("account-button").addEventListener("click", () => {
+    if (!currentSession) return;
+
+    const username =
+      currentSession.user.user_metadata?.minecraft_name ||
+      currentSession.user.email;
+
+    showToast(`Signed in as ${username}.`);
+  });
+}
+
+/* =========================================
    ADMIN ROLE CHECK
 ========================================= */
 
 async function checkAdminRole() {
   if (!currentSession) {
     isAdmin = false;
+
+    if ($("admin-button")) {
+      $("admin-button").hidden = true;
+    }
+
     return;
   }
 
@@ -1592,15 +1831,20 @@ async function checkAdminRole() {
   if (error) {
     console.error("Role check failed:", error);
     isAdmin = false;
+
+    if ($("admin-button")) {
+      $("admin-button").hidden = true;
+    }
+
     return;
   }
 
-  isAdmin = data?.role === "admin" || data?.role === "editor";
+  isAdmin =
+    data?.role === "admin" ||
+    data?.role === "editor";
 
-  const adminButton = $("admin-button");
-
-  if (adminButton) {
-    adminButton.hidden = !isAdmin;
+  if ($("admin-button")) {
+    $("admin-button").hidden = !isAdmin;
   }
 
   if (isAdmin) {
@@ -1613,50 +1857,76 @@ async function checkAdminRole() {
    AUTH STATE CHANGES
 ========================================= */
 
-supabaseClient.auth.onAuthStateChange((_event, session) => {
-  currentSession = session;
+supabaseClient.auth.onAuthStateChange(
+  (_event, session) => {
+    currentSession = session;
 
-  setTimeout(async () => {
-    await updateAuthUI();
+    window.setTimeout(async () => {
+      await updateAuthUI();
 
-    if (session) {
-      await checkAdminRole();
-    } else {
-      isAdmin = false;
-    }
-  }, 0);
-});
+      if (session) {
+        await checkAdminRole();
+      } else {
+        isAdmin = false;
+        requests = [];
+        catalogCache = [];
+
+        if ($("admin-button")) {
+          $("admin-button").hidden = true;
+        }
+
+        if ($("admin-section")) {
+          $("admin-section").hidden = true;
+          $("admin-section").style.display = "none";
+        }
+      }
+    }, 0);
+  }
+);
+
 /* =========================================
    ADMIN DASHBOARD
 ========================================= */
 
 function openAdmin() {
   if (!isAdmin) {
-    showToast("You do not have permission to access the admin area.", "error");
+    showToast(
+      "You do not have permission to access the admin area.",
+      "error"
+    );
     return;
   }
 
-  const adminSection = $("admin-section");
+  if ($("offers")) {
+    $("offers").style.display = "none";
+  }
 
-  if (adminSection) {
-    adminSection.hidden = false;
-    adminSection.scrollIntoView({
+  if ($("shop")) {
+    $("shop").style.display = "none";
+  }
+
+  if ($("admin-section")) {
+    $("admin-section").hidden = false;
+    $("admin-section").style.display = "";
+
+    $("admin-section").scrollIntoView({
       behavior: "smooth",
       block: "start"
     });
   }
 
-  showCategory("Admin");
+  document.querySelectorAll(".nav-link").forEach(link => {
+    link.classList.remove("active");
+  });
 
   loadRequests();
   loadCatalogProducts();
 }
 
 function closeAdmin() {
-  const adminSection = $("admin-section");
-
-  if (adminSection) {
-    adminSection.hidden = true;
+  if ($("admin-section")) {
+    $("admin-section").hidden = true;
+    $("admin-section").style.display = "none";
   }
 
   showCategory("All");
@@ -1677,6 +1947,14 @@ if ($("admin-close")) {
 async function loadRequests() {
   if (!isAdmin) return;
 
+  const container = $("admin-requests");
+
+  if (container) {
+    container.innerHTML = `
+      <div class="loading-state">Loading orders...</div>
+    `;
+  }
+
   const { data, error } = await supabaseClient
     .from("orders")
     .select("*")
@@ -1684,7 +1962,15 @@ async function loadRequests() {
 
   if (error) {
     console.error("Could not load orders:", error);
-    showToast("Could not load orders.", "error");
+
+    if (container) {
+      container.innerHTML = `
+        <p class="error-message">
+          Could not load orders: ${escapeHTML(error.message)}
+        </p>
+      `;
+    }
+
     return;
   }
 
@@ -1692,6 +1978,14 @@ async function loadRequests() {
 
   renderRequests();
   renderAdminStats();
+}
+
+/* =========================================
+   REFRESH ORDERS
+========================================= */
+
+if ($("refresh-requests")) {
+  $("refresh-requests").addEventListener("click", loadRequests);
 }
 
 /* =========================================
@@ -1711,7 +2005,10 @@ function renderAdminStats() {
 
   const totalRevenue = requests
     .filter(request => request.status === "completed")
-    .reduce((sum, request) => sum + Number(request.total || 0), 0);
+    .reduce(
+      (sum, request) => sum + Number(request.total || 0),
+      0
+    );
 
   setText("admin-total-orders", totalOrders);
   setText("admin-pending-orders", pendingOrders);
@@ -1724,6 +2021,18 @@ function renderAdminStats() {
 ========================================= */
 
 function filterRequests(filter) {
+  const allowedFilters = [
+    "all",
+    "pending",
+    "processing",
+    "completed",
+    "cancelled"
+  ];
+
+  if (!allowedFilters.includes(filter)) {
+    filter = "all";
+  }
+
   currentRequestFilter = filter;
 
   document.querySelectorAll("[data-request-filter]").forEach(button => {
@@ -1766,6 +2075,7 @@ function renderRequests() {
         <p>There are currently no orders in this category.</p>
       </div>
     `;
+
     return;
   }
 
@@ -1781,7 +2091,24 @@ function renderRequests() {
       </div>
     `).join("");
 
-    const status = escapeHTML(request.status || "pending");
+    const allowedStatuses = [
+      "pending",
+      "processing",
+      "completed",
+      "cancelled"
+    ];
+
+    const status = allowedStatuses.includes(request.status)
+      ? request.status
+      : "pending";
+
+    const links = Array.isArray(request.links)
+      ? request.links
+      : [];
+
+    const images = Array.isArray(request.image_urls)
+      ? request.image_urls
+      : [];
 
     return `
       <article class="admin-request-card">
@@ -1790,7 +2117,10 @@ function renderRequests() {
             <span class="request-number">
               ORDER #${escapeHTML(String(request.id).slice(0, 8))}
             </span>
-            <h3>${escapeHTML(request.minecraft_name || "Unknown player")}</h3>
+
+            <h3>
+              ${escapeHTML(request.minecraft_name || "Unknown player")}
+            </h3>
           </div>
 
           <span class="status-badge status-${status}">
@@ -1808,79 +2138,111 @@ function renderRequests() {
           ${itemList || "<p>No item details available.</p>"}
         </div>
 
-        ${
-          request.description
-            ? `<div class="request-description">
-                 <strong>Description</strong>
-                 <p>${escapeHTML(request.description)}</p>
-               </div>`
-            : ""
-        }
+        ${request.description ? `
+          <div class="request-description">
+            <strong>Description</strong>
+            <p>${escapeHTML(request.description)}</p>
+          </div>
+        ` : ""}
 
-        ${
-          request.note
-            ? `<div class="request-description">
-                 <strong>Customer note</strong>
-                 <p>${escapeHTML(request.note)}</p>
-               </div>`
-            : ""
-        }
+        ${request.note ? `
+          <div class="request-description">
+            <strong>Customer note</strong>
+            <p>${escapeHTML(request.note)}</p>
+          </div>
+        ` : ""}
 
-        ${
-          request.delivery_district || request.delivery_address
-            ? `<div class="request-description">
-                 <strong>Delivery</strong>
-                 <p>
-                   ${escapeHTML(request.delivery_district || "")}
-                   ${escapeHTML(request.delivery_address || "")}
-                 </p>
-               </div>`
-            : ""
-        }
+        ${request.desired_price !== null &&
+          request.desired_price !== undefined ? `
+          <div class="request-description">
+            <strong>Desired budget</strong>
+            <p>${money(request.desired_price)}</p>
+          </div>
+        ` : ""}
 
-        ${
-          Array.isArray(request.links) && request.links.length
-            ? `<div class="request-links">
-                 <strong>Reference links</strong>
-                 ${request.links.map(link => {
-                   const safeLink = safeExternalUrl(link);
-                   return safeLink
-                     ? `<a href="${escapeHTML(safeLink)}" target="_blank" rel="noopener noreferrer">Open reference</a>`
-                     : "";
-                 }).join("")}
-               </div>`
-            : ""
-        }
+        ${request.due_date ? `
+          <div class="request-description">
+            <strong>Desired deadline</strong>
+            <p>${formatDate(request.due_date)}</p>
+          </div>
+        ` : ""}
 
-        ${
-          Array.isArray(request.image_urls) && request.image_urls.length
-            ? `<div class="request-images">
-                 ${request.image_urls.map(url => {
-                   const safeUrl = safeExternalUrl(url);
-                   return safeUrl
-                     ? `<a href="${escapeHTML(safeUrl)}" target="_blank" rel="noopener noreferrer">
-                          <img src="${escapeHTML(safeUrl)}" alt="Reference image" loading="lazy">
-                        </a>`
-                     : "";
-                 }).join("")}
-               </div>`
-            : ""
-        }
+        ${request.delivery_district || request.delivery_address ? `
+          <div class="request-description">
+            <strong>Delivery</strong>
+            <p>
+              ${escapeHTML(request.delivery_district || "")}
+              ${escapeHTML(request.delivery_address || "")}
+            </p>
+          </div>
+        ` : ""}
+
+        ${links.length ? `
+          <div class="request-links">
+            <strong>Reference links</strong>
+
+            ${links.map(link => {
+              const safeLink = safeExternalUrl(link);
+
+              return safeLink ? `
+                <a
+                  href="${escapeHTML(safeLink)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >Open reference</a>
+              ` : "";
+            }).join("")}
+          </div>
+        ` : ""}
+
+        ${images.length ? `
+          <div class="request-images">
+            ${images.map(url => {
+              const safeUrl = safeExternalUrl(url);
+
+              return safeUrl ? `
+                <a
+                  href="${escapeHTML(safeUrl)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <img
+                    src="${escapeHTML(safeUrl)}"
+                    alt="Reference image"
+                    loading="lazy"
+                  >
+                </a>
+              ` : "";
+            }).join("")}
+          </div>
+        ` : ""}
 
         <div class="request-actions">
           <select
             data-status-select="${escapeHTML(request.id)}"
             aria-label="Change order status"
           >
-            <option value="pending" ${status === "pending" ? "selected" : ""}>Pending</option>
-            <option value="processing" ${status === "processing" ? "selected" : ""}>Processing</option>
-            <option value="completed" ${status === "completed" ? "selected" : ""}>Completed</option>
-            <option value="cancelled" ${status === "cancelled" ? "selected" : ""}>Cancelled</option>
+            <option value="pending" ${status === "pending" ? "selected" : ""}>
+              Pending
+            </option>
+
+            <option value="processing" ${status === "processing" ? "selected" : ""}>
+              Processing
+            </option>
+
+            <option value="completed" ${status === "completed" ? "selected" : ""}>
+              Completed
+            </option>
+
+            <option value="cancelled" ${status === "cancelled" ? "selected" : ""}>
+              Cancelled
+            </option>
           </select>
 
           <button
             class="secondary-button"
             data-update-status="${escapeHTML(request.id)}"
+            type="button"
           >
             Update status
           </button>
@@ -1892,11 +2254,15 @@ function renderRequests() {
   container.querySelectorAll("[data-update-status]").forEach(button => {
     button.addEventListener("click", async () => {
       const id = button.dataset.updateStatus;
+
       const select = container.querySelector(
         `[data-status-select="${CSS.escape(id)}"]`
       );
 
       if (!select) return;
+
+      button.disabled = true;
+      button.textContent = "Updating...";
 
       await updateRequestStatus(id, select.value);
     });
@@ -1914,6 +2280,11 @@ async function updateRequestStatus(id, status) {
     "completed",
     "cancelled"
   ];
+
+  if (!isAdmin) {
+    showToast("Permission denied.", "error");
+    return;
+  }
 
   if (!allowedStatuses.includes(status)) {
     showToast("Invalid status.", "error");
@@ -1935,6 +2306,7 @@ async function updateRequestStatus(id, status) {
 
   await loadRequests();
 }
+
 /* =========================================
    LOAD COMPLETE PRODUCT CATALOG
 ========================================= */
@@ -1964,10 +2336,13 @@ async function loadCatalogProducts() {
         Could not load catalogue: ${escapeHTML(error.message)}
       </p>
     `;
+
     return;
   }
 
-  renderCatalogProducts(data || []);
+  catalogCache = data || [];
+
+  renderCatalogProducts(catalogCache);
 }
 
 /* =========================================
@@ -1984,7 +2359,9 @@ function renderCatalogProducts(catalog) {
   ).toLowerCase();
 
   const filtered = catalog.filter(product =>
-    String(product.name || "").toLowerCase().includes(searchValue)
+    String(product.name || "")
+      .toLowerCase()
+      .includes(searchValue)
   );
 
   if (!filtered.length) {
@@ -1994,6 +2371,7 @@ function renderCatalogProducts(catalog) {
         <p>Try another search or import products.</p>
       </div>
     `;
+
     return;
   }
 
@@ -2030,7 +2408,9 @@ function renderCatalogProducts(catalog) {
 
               <td>
                 <span class="status-badge ${
-                  product.is_active ? "status-completed" : "status-pending"
+                  product.is_active
+                    ? "status-completed"
+                    : "status-pending"
                 }">
                   ${product.is_active ? "Active" : "Inactive"}
                 </span>
@@ -2040,6 +2420,7 @@ function renderCatalogProducts(catalog) {
                 <button
                   class="secondary-button"
                   data-catalog-edit="${escapeHTML(product.id)}"
+                  type="button"
                 >
                   Edit
                 </button>
@@ -2053,17 +2434,25 @@ function renderCatalogProducts(catalog) {
 
   container.querySelectorAll("[data-catalog-edit]").forEach(button => {
     button.addEventListener("click", () => {
-      const product = catalog.find(
+      const product = catalogCache.find(
         item => String(item.id) === button.dataset.catalogEdit
       );
 
-      if (product) openProductEditor(product);
+      if (product) {
+        openProductEditor(product);
+      }
     });
   });
 }
 
+/* =========================================
+   CATALOGUE SEARCH
+========================================= */
+
 if ($("catalog-search")) {
-  $("catalog-search").addEventListener("input", loadCatalogProducts);
+  $("catalog-search").addEventListener("input", () => {
+    renderCatalogProducts(catalogCache);
+  });
 }
 
 /* =========================================
@@ -2112,6 +2501,7 @@ async function createCatalogProduct() {
   }
 
   showToast("Product added to catalogue.");
+
   await loadCatalogProducts();
 }
 
@@ -2162,6 +2552,7 @@ function parseCatalogCSV(text) {
     }
 
     result.push(value.trim());
+
     return result;
   }
 
@@ -2212,7 +2603,9 @@ function normalizeImportedProduct(raw) {
     category,
     description: String(raw.description || ""),
     price: 0,
-    stack_size: [1, 16, 64].includes(stackSize) ? stackSize : 64,
+    stack_size: [1, 16, 64].includes(stackSize)
+      ? stackSize
+      : 64,
     discount_percent: 0,
     is_active: false
   };
@@ -2262,35 +2655,62 @@ async function importCatalogFile(file) {
 
     if (!confirmed) return;
 
+    const { data: existing, error: lookupError } =
+      await supabaseClient
+        .from("products")
+        .select("name");
+
+    if (lookupError) throw lookupError;
+
+    const existingNames = new Set(
+      (existing || []).map(product =>
+        String(product.name).toLowerCase()
+      )
+    );
+
+    const newProducts = uniqueProducts.filter(product =>
+      !existingNames.has(product.name.toLowerCase())
+    );
+
+    if (!newProducts.length) {
+      showToast("All products already exist.", "error");
+      return;
+    }
+
     const { error } = await supabaseClient
       .from("products")
-      .upsert(uniqueProducts, {
-        onConflict: "name",
-        ignoreDuplicates: true
-      });
+      .insert(newProducts);
 
     if (error) throw error;
 
-    showToast(`${uniqueProducts.length} products imported.`);
+    showToast(`${newProducts.length} products imported.`);
+
     await loadCatalogProducts();
     await loadProducts();
 
   } catch (error) {
     console.error("Import error:", error);
-    showToast(`Import failed: ${error.message}`, "error");
+
+    showToast(
+      `Import failed: ${error.message}`,
+      "error"
+    );
   }
 }
 
 if ($("catalog-import-file")) {
-  $("catalog-import-file").addEventListener("change", event => {
-    const file = event.target.files?.[0];
+  $("catalog-import-file").addEventListener(
+    "change",
+    event => {
+      const file = event.target.files?.[0];
 
-    if (file) {
-      importCatalogFile(file);
+      if (file) {
+        importCatalogFile(file);
+      }
+
+      event.target.value = "";
     }
-
-    event.target.value = "";
-  });
+  );
 }
 
 /* =========================================
@@ -2316,8 +2736,24 @@ async function initializeShop() {
 
   } catch (error) {
     console.error("Shop initialization failed:", error);
-    showToast("The shop could not be initialized.", "error");
+
+    showToast(
+      "The shop could not be initialized.",
+      "error"
+    );
   }
 }
 
-document.addEventListener("DOMContentLoaded", initializeShop);
+/* =========================================
+   START APPLICATION
+========================================= */
+
+if (document.readyState === "loading") {
+  document.addEventListener(
+    "DOMContentLoaded",
+    initializeShop,
+    { once: true }
+  );
+} else {
+  initializeShop();
+}
