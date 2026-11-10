@@ -14,7 +14,6 @@
 
   <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
   <div class="announcement">
@@ -32,11 +31,27 @@
       <input id="search" type="search" placeholder="Search the marketplace..." autocomplete="off">
     </div>
 
-    <button class="cart-header-button" id="open-cart" type="button">
-      <span class="cart-symbol">🛒</span>
-      <span>Cart</span>
-      <span class="cart-count" id="cart-count">0</span>
-    </button>
+    <div class="header-actions">
+      <span id="user-label"></span>
+
+      <button id="login-button" class="secondary-button" type="button">
+        Sign in
+      </button>
+
+      <button id="account-button" class="secondary-button" type="button" hidden>
+        Account
+      </button>
+
+      <button id="logout-button" class="secondary-button" type="button" hidden>
+        Log out
+      </button>
+
+      <button class="cart-header-button" id="cart-button" type="button">
+        <span class="cart-symbol">🛒</span>
+        <span>Cart</span>
+        <span class="cart-count" id="cart-count">0</span>
+      </button>
+    </div>
   </header>
 
   <nav class="nav" id="shop-navigation">
@@ -62,7 +77,7 @@
 
   <main class="main-container">
 
-    <!-- OVERVIEW / OFFERS -->
+    <!-- OFFERS -->
     <section id="offers" class="offers-section">
       <div class="section-heading">
         <div>
@@ -84,7 +99,7 @@
       </div>
     </section>
 
-    <!-- CATEGORY SHOP -->
+    <!-- SHOP -->
     <section id="shop" class="shop-section" style="display:none;">
       <div class="section-heading">
         <div>
@@ -116,28 +131,91 @@
         </div>
 
         <div class="admin-header-actions">
-          <button id="refresh-requests" class="secondary-button" type="button">↻ Refresh</button>
-          <button id="admin-logout" class="secondary-button" type="button">Log out</button>
+          <button id="refresh-requests" class="secondary-button" type="button">
+            ↻ Refresh
+          </button>
+          <button id="admin-close" class="secondary-button" type="button">
+            Back to shop
+          </button>
         </div>
       </div>
 
+      <!-- STATISTICS -->
+      <div class="admin-stats">
+        <div class="admin-stat-card">
+          <span>Total orders</span>
+          <strong id="admin-total-orders">0</strong>
+        </div>
+        <div class="admin-stat-card">
+          <span>Pending</span>
+          <strong id="admin-pending-orders">0</strong>
+        </div>
+        <div class="admin-stat-card">
+          <span>Completed</span>
+          <strong id="admin-completed-orders">0</strong>
+        </div>
+        <div class="admin-stat-card">
+          <span>Revenue</span>
+          <strong id="admin-revenue">0 KB$</strong>
+        </div>
+      </div>
+
+      <!-- REQUEST FILTERS -->
       <div class="admin-toolbar">
         <div class="admin-filters">
-          <button class="filter-button active" data-filter="all" type="button">All requests</button>
-          <button class="filter-button" data-filter="pending" type="button">Pending</button>
-          <button class="filter-button" data-filter="accepted" type="button">Accepted</button>
-          <button class="filter-button" data-filter="completed" type="button">Completed</button>
-          <button class="filter-button" data-filter="rejected" type="button">Rejected</button>
+          <button class="filter-button active" data-request-filter="all" type="button">All orders</button>
+          <button class="filter-button" data-request-filter="pending" type="button">Pending</button>
+          <button class="filter-button" data-request-filter="processing" type="button">Processing</button>
+          <button class="filter-button" data-request-filter="completed" type="button">Completed</button>
+          <button class="filter-button" data-request-filter="cancelled" type="button">Cancelled</button>
         </div>
       </div>
 
       <div id="admin-requests" class="admin-requests">
-        <div class="loading-state">Loading requests...</div>
+        <div class="loading-state">Loading orders...</div>
+      </div>
+
+      <!-- PRODUCT CATALOGUE -->
+      <div class="catalog-admin">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">PRODUCT MANAGEMENT</div>
+            <h2>Product <span class="orange">Catalogue.</span></h2>
+            <p class="muted">Manage prices, stock sizes and visibility.</p>
+          </div>
+        </div>
+
+        <div class="catalog-toolbar">
+          <input
+            id="catalog-search"
+            type="search"
+            placeholder="Search catalogue..."
+          >
+
+          <button id="catalog-add-button" class="secondary-button" type="button">
+            + Add product
+          </button>
+
+          <label class="secondary-button catalog-import-label">
+            Import JSON / CSV
+            <input
+              id="catalog-import-file"
+              type="file"
+              accept=".json,.csv"
+              hidden
+            >
+          </label>
+        </div>
+
+        <div id="catalog-products">
+          <div class="loading-state">Loading catalogue...</div>
+        </div>
       </div>
     </section>
 
   </main>
 
+  <!-- FOOTER -->
   <footer class="footer">
     <div class="footer-brand">
       <span class="brand-mark">B</span>
@@ -147,43 +225,47 @@
     <span class="footer-copyright">© Brat Ltd.</span>
   </footer>
 
-  <!-- FLOATING ADMIN BUTTON -->
-  <button id="admin-login-open" class="admin-floating-button" type="button" title="Admin Login">
+  <!-- ADMIN BUTTON -->
+  <button id="admin-button" class="admin-floating-button" type="button" hidden title="Admin Dashboard">
     ⚙
   </button>
 
-  <!-- ADMIN LOGIN MODAL -->
-  <div id="admin-login-modal" class="modal-backdrop">
+  <!-- LOGIN MODAL -->
+  <div id="login-modal" class="modal-backdrop">
     <div class="modal admin-login-modal">
-      <button class="modal-close" data-close="admin-login-modal" type="button">×</button>
+      <button id="login-close" class="modal-close" type="button">×</button>
 
-      <div class="modal-eyebrow">BRAT LTD. MANAGEMENT</div>
-      <h2>Admin <span class="orange">Login.</span></h2>
-      <p class="muted">Sign in to manage the marketplace.</p>
+      <div class="modal-eyebrow">BRAT LTD. ACCOUNT</div>
+      <h2>Welcome <span class="orange">back.</span></h2>
+      <p class="muted">Sign in to your account.</p>
 
-      <form id="admin-login-form">
-        <label for="admin-email">Email address</label>
-        <input id="admin-email" type="email" placeholder="admin@example.com" required>
+      <form id="login-form">
+        <label for="login-email">Email address</label>
+        <input id="login-email" type="email" placeholder="your@email.com" required>
 
-        <label for="admin-password">Password</label>
-        <input id="admin-password" type="password" placeholder="Your password" required>
+        <label for="login-password">Password</label>
+        <input id="login-password" type="password" placeholder="Your password" required>
 
-        <button class="primary-button full-width" type="submit">Sign in</button>
-        <p id="admin-login-message" class="form-message"></p>
+        <button class="primary-button full-width" type="submit">
+          Sign in
+        </button>
+
+        <p id="login-message" class="form-message"></p>
       </form>
     </div>
   </div>
 
   <!-- CART OVERLAY -->
-  <div id="overlay" class="cart-overlay"></div>
+  <div id="cart-overlay" class="cart-overlay"></div>
 
+  <!-- CART PANEL -->
   <aside id="cart-panel" class="cart-panel">
     <div class="cart-header">
       <div>
         <div class="eyebrow">YOUR SELECTION</div>
         <h2>Your Cart</h2>
       </div>
-      <button id="close-cart" class="modal-close" type="button">×</button>
+      <button id="cart-close" class="modal-close" type="button">×</button>
     </div>
 
     <div id="cart-items" class="cart-items">
@@ -195,7 +277,7 @@
 
     <div class="cart-footer">
       <div id="cart-total" class="cart-total"></div>
-      <button id="checkout" class="primary-button full-width" type="button">
+      <button id="checkout-button" class="primary-button full-width" type="button">
         Continue to checkout →
       </button>
       <p class="cart-disclaimer">All prices are displayed in KB$.</p>
@@ -203,9 +285,9 @@
   </aside>
 
   <!-- CHECKOUT MODAL -->
-  <div id="order-modal" class="modal-backdrop">
+  <div id="checkout-modal" class="modal-backdrop">
     <div class="modal checkout-modal">
-      <button class="modal-close" data-close="order-modal" type="button">×</button>
+      <button id="checkout-close" class="modal-close" type="button">×</button>
 
       <div class="modal-eyebrow">FINAL STEP</div>
       <h2>Complete your <span class="orange">order.</span></h2>
@@ -213,18 +295,21 @@
 
       <form id="checkout-form">
 
-        <label for="player-name">Minecraft username *</label>
-        <input id="player-name" type="text" maxlength="32" placeholder="Your Minecraft username" required>
+        <label for="checkout-minecraft-name">Minecraft username *</label>
+        <input
+          id="checkout-minecraft-name"
+          type="text"
+          maxlength="32"
+          placeholder="Your Minecraft username"
+          required
+        >
 
         <div class="form-divider"></div>
 
         <div class="form-section-title">Delivery details</div>
 
-        <label for="due-date">Desired completion date *</label>
-        <input id="due-date" type="date" required>
-
-        <label for="delivery-district">District *</label>
-        <select id="delivery-district" required>
+        <label for="checkout-district">District *</label>
+        <select id="checkout-district" required>
           <option value="">Select your district</option>
           <option value="Marktplatz">Marktplatz</option>
           <option value="Vannenleben">Vannenleben</option>
@@ -238,25 +323,37 @@
           <option value="Valheim">Valheim</option>
         </select>
 
-        <label for="delivery-address">Exact delivery address *</label>
-        <input id="delivery-address" type="text" maxlength="150" placeholder="Street, building, coordinates..." required>
+        <label for="checkout-address">Exact delivery address *</label>
+        <input
+          id="checkout-address"
+          type="text"
+          maxlength="150"
+          placeholder="Street, building, coordinates..."
+          required
+        >
 
-        <label for="order-note">Additional note (optional)</label>
-        <textarea id="order-note" rows="3" maxlength="1000" placeholder="Any additional information for your order..."></textarea>
+        <label for="checkout-note">Additional note (optional)</label>
+        <textarea
+          id="checkout-note"
+          rows="3"
+          maxlength="1000"
+          placeholder="Any additional information..."
+        ></textarea>
 
         <div class="checkout-summary">
           <div class="checkout-summary-title">Order summary</div>
-          <div id="checkout-total-preview"></div>
+          <div id="checkout-summary"></div>
         </div>
 
-        <button id="send-order" class="primary-button full-width" type="submit">
+        <button id="place-order-button" class="primary-button full-width" type="submit">
           Place order →
         </button>
-
-        <p id="checkout-message" class="form-message"></p>
       </form>
     </div>
   </div>
+
+  <!-- TOASTS -->
+  <div id="toast-container"></div>
 
   <!-- SCRIPTS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
