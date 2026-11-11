@@ -1,5 +1,3 @@
-das ist abere mien aktuelle app.js
-
 
 const supabaseClient = window.supabase.createClient(
   window.SUPABASE_URL,
@@ -461,17 +459,29 @@ function productPriceMarkup(product) {
   return `<span class="price">${money(price)}</span>`;
 }
 
+/* ADMIN PRODUCT BUTTONS */
+
 function adminProductButton(product) {
   if (!isAdmin) return "";
 
   return `
-    <button
-      class="product-admin-menu"
-      data-edit-product="${escapeHTML(product.id)}"
-      type="button"
-    >
-      ✎ Edit
-    </button>
+    <div class="product-admin-actions">
+      <button
+        class="product-admin-menu"
+        data-edit-product="${escapeHTML(product.id)}"
+        type="button"
+      >
+        ✎ Edit
+      </button>
+
+      <button
+        class="product-delete-button"
+        data-delete-product="${escapeHTML(product.id)}"
+        type="button"
+      >
+        🗑 Delete
+      </button>
+    </div>
   `;
 }
 
@@ -572,6 +582,13 @@ function renderProducts() {
       if (product) {
         openProductEditor(product);
       }
+    });
+  });
+
+  // NEW: Delete products directly from the shop
+  container.querySelectorAll("[data-delete-product]").forEach(button => {
+    button.addEventListener("click", async () => {
+      await deleteProduct(button.dataset.deleteProduct);
     });
   });
 }
@@ -789,6 +806,75 @@ function openProductEditor(productOrId) {
       }
     }
   );
+}
+
+/* =========================================
+   DELETE PRODUCT
+========================================= */
+
+async function deleteProduct(productId) {
+  if (!isAdmin || !currentSession) {
+    showToast("Permission denied.", "error");
+    return;
+  }
+
+  const product =
+    catalogCache.find(item =>
+      String(item.id) === String(productId)
+    ) ||
+    products.find(item =>
+      String(item.id) === String(productId)
+    );
+
+  if (!product) {
+    showToast("Product not found.", "error");
+    return;
+  }
+
+  const confirmed = confirm(
+    `Are you sure you want to permanently delete "${product.name}"?\n\n` +
+    "This action cannot be undone."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const { error } = await supabaseClient
+      .from("products")
+      .delete()
+      .eq("id", productId);
+
+    if (error) throw error;
+
+    // Remove product from cart
+    delete cart[productId];
+    saveCart();
+
+    // Remove product from local product lists
+    products = products.filter(
+      item => String(item.id) !== String(productId)
+    );
+
+    catalogCache = catalogCache.filter(
+      item => String(item.id) !== String(productId)
+    );
+
+    // Refresh all product displays
+    renderProducts();
+    renderOffers();
+    renderCart();
+    renderCatalogProducts(catalogCache);
+
+    showToast("Product deleted successfully.");
+
+  } catch (error) {
+    console.error("Product deletion failed:", error);
+
+    showToast(
+      `Could not delete product: ${error.message}`,
+      "error"
+    );
+  }
 }
 
 /* =========================================
@@ -2419,13 +2505,23 @@ function renderCatalogProducts(catalog) {
               </td>
 
               <td>
-                <button
-                  class="secondary-button"
-                  data-catalog-edit="${escapeHTML(product.id)}"
-                  type="button"
-                >
-                  Edit
-                </button>
+                <div class="catalog-actions">
+                  <button
+                    class="secondary-button"
+                    data-catalog-edit="${escapeHTML(product.id)}"
+                    type="button"
+                  >
+                    Edit
+                  </button>
+
+                  <button
+                    class="product-delete-button"
+                    data-catalog-delete="${escapeHTML(product.id)}"
+                    type="button"
+                  >
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           `).join("")}
@@ -2443,6 +2539,13 @@ function renderCatalogProducts(catalog) {
       if (product) {
         openProductEditor(product);
       }
+    });
+  });
+
+  // NEW: Delete products directly from the catalogue
+  container.querySelectorAll("[data-catalog-delete]").forEach(button => {
+    button.addEventListener("click", async () => {
+      await deleteProduct(button.dataset.catalogDelete);
     });
   });
 }
