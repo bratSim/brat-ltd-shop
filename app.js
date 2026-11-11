@@ -338,11 +338,15 @@ function showCategory(nextCategory) {
   });
 }
 
-document.querySelectorAll(".nav-link").forEach(link => {
-  link.addEventListener("click", event => {
-    event.preventDefault();
-    showCategory(link.dataset.category);
-  });
+/* Delegated navigation click handler */
+document.addEventListener("click", event => {
+  const link = event.target.closest(".nav-link");
+
+  if (!link) return;
+
+  event.preventDefault();
+
+  showCategory(link.dataset.category);
 });
 
 /* =========================================
