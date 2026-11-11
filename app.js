@@ -2586,12 +2586,12 @@ async function createCatalogProduct() {
     "Enchantments"
   ];
 
-  const category = prompt(
+  const selectedCategory = prompt(
     "Category: Blocks, Items, Redstone, Armor & Weapons, Enchantments",
     "Items"
   );
 
-  if (!validCategories.includes(category)) {
+  if (!validCategories.includes(selectedCategory)) {
     showToast("Invalid category.", "error");
     return;
   }
@@ -2600,7 +2600,7 @@ async function createCatalogProduct() {
     .from("products")
     .insert({
       name: name.trim(),
-      category,
+      category: selectedCategory,
       description: "",
       price: 0,
       stack_size: 64,
@@ -2704,7 +2704,7 @@ function normalizeImportedProduct(raw) {
     raw.category || "Items"
   ).trim();
 
-  const category = validCategories.includes(requestedCategory)
+  const normalizedCategory = validCategories.includes(requestedCategory)
     ? requestedCategory
     : "Items";
 
@@ -2714,7 +2714,7 @@ function normalizeImportedProduct(raw) {
 
   return {
     name,
-    category,
+    category: normalizedCategory,
     description: String(raw.description || ""),
     price: 0,
     stack_size: [1, 16, 64].includes(stackSize)
@@ -2833,13 +2833,19 @@ if ($("catalog-import-file")) {
 
 async function initializeShop() {
   try {
+    // Set the default category before asynchronous loading.
+    showCategory("All");
+
     await loadSession();
 
     await loadProducts();
 
     renderCart();
 
-    showCategory("All");
+    // Important:
+    // Do not call showCategory("All") here.
+    // Otherwise a category selected by the user
+    // during loading could be overwritten.
 
     if (currentSession && isAdmin) {
       await loadRequests();
