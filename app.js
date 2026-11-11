@@ -271,6 +271,7 @@ function showCategory(nextCategory) {
     "All",
     "Blocks",
     "Items",
+    "Redstone",
     "Armor & Weapons",
     "Enchantments",
     "Services"
@@ -315,6 +316,7 @@ function showCategory(nextCategory) {
   const descriptions = {
     "Blocks": "Building materials and decorative blocks.",
     "Items": "Useful items and resources.",
+    "Redstone": "Redstone components, mechanisms and automation.",
     "Armor & Weapons": "Equipment for your adventures.",
     "Enchantments": "Enchantments and upgrades.",
     "Services": "Services and custom requests."
@@ -585,7 +587,6 @@ function renderProducts() {
     });
   });
 
-  // NEW: Delete products directly from the shop
   container.querySelectorAll("[data-delete-product]").forEach(button => {
     button.addEventListener("click", async () => {
       await deleteProduct(button.dataset.deleteProduct);
@@ -638,6 +639,7 @@ function openProductEditor(productOrId) {
   const categories = [
     "Blocks",
     "Items",
+    "Redstone",
     "Armor & Weapons",
     "Enchantments"
   ];
@@ -846,11 +848,14 @@ async function deleteProduct(productId) {
 
     if (error) throw error;
 
-    // Remove product from cart
-    delete cart[productId];
+    Object.keys(cart).forEach(id => {
+      if (String(id) === String(productId)) {
+        delete cart[id];
+      }
+    });
+
     saveCart();
 
-    // Remove product from local product lists
     products = products.filter(
       item => String(item.id) !== String(productId)
     );
@@ -859,7 +864,6 @@ async function deleteProduct(productId) {
       item => String(item.id) !== String(productId)
     );
 
-    // Refresh all product displays
     renderProducts();
     renderOffers();
     renderCart();
@@ -2542,7 +2546,6 @@ function renderCatalogProducts(catalog) {
     });
   });
 
-  // NEW: Delete products directly from the catalogue
   container.querySelectorAll("[data-catalog-delete]").forEach(button => {
     button.addEventListener("click", async () => {
       await deleteProduct(button.dataset.catalogDelete);
@@ -2571,17 +2574,18 @@ async function createCatalogProduct() {
 
   if (!name || !name.trim()) return;
 
-  const category = prompt(
-    "Category: Blocks, Items, Armor & Weapons, Enchantments",
-    "Items"
-  );
-
   const validCategories = [
     "Blocks",
     "Items",
+    "Redstone",
     "Armor & Weapons",
     "Enchantments"
   ];
+
+  const category = prompt(
+    "Category: Blocks, Items, Redstone, Armor & Weapons, Enchantments",
+    "Items"
+  );
 
   if (!validCategories.includes(category)) {
     showToast("Invalid category.", "error");
@@ -2687,6 +2691,7 @@ function normalizeImportedProduct(raw) {
   const validCategories = [
     "Blocks",
     "Items",
+    "Redstone",
     "Armor & Weapons",
     "Enchantments"
   ];
