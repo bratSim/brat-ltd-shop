@@ -1,6 +1,7 @@
+
 /* =====================================================
    BRAT LTD. — KANTOBAY MARKETPLACE
-   Supabase application
+   Complete application
 ===================================================== */
 
 const supabaseClient = window.supabase.createClient(
@@ -38,7 +39,7 @@ const CATEGORIES = [
 ===================================================== */
 
 function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+  return String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
@@ -94,6 +95,10 @@ function safeImageUrl(value) {
   }
 }
 
+/* =====================================================
+   MINECRAFT TEXTURES
+===================================================== */
+
 function getTextureName(name) {
   const map = {
     "Stone": "stone",
@@ -145,9 +150,22 @@ function productImage(product) {
     return safeImageUrl(product.image_url);
   }
 
-  const texture = getTextureName(product.name);
+  const name = String(product.name || "").trim().toLowerCase();
 
-  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures/item/${texture}.png`;
+  const specialTextures = {
+    "oak wood": "block/oak_wood",
+    "oak log": "block/oak_log",
+    "oak planks": "block/oak_planks",
+    "spruce wood": "block/spruce_wood",
+    "birch wood": "block/birch_wood",
+    "stripped oak wood": "block/stripped_oak_wood",
+    "stripped oak log": "block/stripped_oak_log"
+  };
+
+  const texture = specialTextures[name] ||
+    `item/${getTextureName(product.name)}`;
+
+  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures/${texture}.png`;
 }
 
 function imageMarkup(product) {
@@ -168,6 +186,10 @@ function imageMarkup(product) {
   `;
 }
 
+/* =====================================================
+   PRODUCT HELPERS
+===================================================== */
+
 function getDiscountPercent(product) {
   return Math.max(0, Number(product.discount_percent || 0));
 }
@@ -183,13 +205,9 @@ function getStackSize(product) {
   return Math.max(1, Number(product.stack_size || 64));
 }
 
-function isService(product) {
-  return product.category === "Services";
-}
-
 function getProductById(id) {
-  return products.find((product) => String(product.id) === String(id))
-    || catalogCache.find((product) => String(product.id) === String(id));
+  return products.find(p => String(p.id) === String(id))
+    || catalogCache.find(p => String(p.id) === String(id));
 }
 
 /* =====================================================
@@ -205,7 +223,7 @@ async function loadProducts() {
 
   if (error) {
     console.error("Product loading error:", error);
-    showToast("Could not load products. Check the Supabase connection.", "error");
+    showToast("Could not load products.", "error");
     products = [];
   } else {
     products = data || [];
@@ -222,7 +240,8 @@ async function loadCatalogProducts() {
   const container = $("catalog-products");
 
   if (container) {
-    container.innerHTML = `<div class="loading-state">Loading catalogue...</div>`;
+    container.innerHTML =
+      `<div class="loading-state">Loading catalogue...</div>`;
   }
 
   const { data, error } = await supabaseClient
@@ -234,7 +253,8 @@ async function loadCatalogProducts() {
     console.error("Catalogue loading error:", error);
 
     if (container) {
-      container.innerHTML = `<p class="error-message">Could not load catalogue.</p>`;
+      container.innerHTML =
+        `<p class="error-message">Could not load catalogue.</p>`;
     }
 
     return;
@@ -255,11 +275,15 @@ function showCategory(nextCategory = "All") {
   const shop = $("shop");
   const admin = $("admin-section");
 
-  if (offers) offers.style.display = nextCategory === "All" ? "" : "none";
-  if (shop) shop.style.display = nextCategory === "All" ? "none" : "";
+  if (offers) offers.style.display =
+    nextCategory === "All" ? "" : "none";
+
+  if (shop) shop.style.display =
+    nextCategory === "All" ? "none" : "";
+
   if (admin) admin.style.display = "none";
 
-  document.querySelectorAll(".nav-link").forEach((link) => {
+  document.querySelectorAll(".nav-link").forEach(link => {
     link.classList.toggle(
       "active",
       link.dataset.category === nextCategory
@@ -290,16 +314,14 @@ function showCategory(nextCategory = "All") {
   renderProducts();
 }
 
-document.querySelectorAll(".nav-link").forEach((link) => {
-  link.addEventListener("click", (event) => {
+document.querySelectorAll(".nav-link").forEach(link => {
+  link.addEventListener("click", event => {
     event.preventDefault();
     showCategory(link.dataset.category || "All");
   });
 });
 
-if ($("admin-close")) {
-  $("admin-close").addEventListener("click", () => showCategory("All"));
-}
+$("admin-close")?.addEventListener("click", () => showCategory("All"));
 
 /* =====================================================
    OFFERS
@@ -311,7 +333,7 @@ function renderOffers() {
 
   if (!container) return;
 
-  const offers = products.filter((product) =>
+  const offers = products.filter(product =>
     Number(product.discount_percent || 0) > 0
   );
 
@@ -323,16 +345,22 @@ function renderOffers() {
 
   if (empty) empty.style.display = "none";
 
-  container.innerHTML = offers.slice(0, 8).map((product) => `
+  container.innerHTML = offers.slice(0, 8).map(product => `
     <article class="product-card offer-card">
       <div class="product-card-image">
         ${imageMarkup(product)}
       </div>
 
       <div class="product-card-content">
-        <span class="product-category">${escapeHTML(product.category)}</span>
+        <span class="product-category">
+          ${escapeHTML(product.category)}
+        </span>
+
         <h3>${escapeHTML(product.name)}</h3>
-        <p class="product-description">${escapeHTML(product.description || "")}</p>
+
+        <p class="product-description">
+          ${escapeHTML(product.description || "")}
+        </p>
 
         <div class="product-price">
           <strong>${money(getSalePrice(product))}</strong>
@@ -363,7 +391,7 @@ function renderProducts() {
 
   const search = ($("search")?.value || "").toLowerCase().trim();
 
-  let visible = products.filter((product) => {
+  const visible = products.filter(product => {
     const categoryMatch =
       category === "All" || product.category === category;
 
@@ -383,19 +411,26 @@ function renderProducts() {
 
   if (empty) empty.style.display = "none";
 
-  container.innerHTML = visible.map((product) => `
+  container.innerHTML = visible.map(product => `
     <article class="product-card">
       <div class="product-card-image">
         ${imageMarkup(product)}
       </div>
 
       <div class="product-card-content">
-        <span class="product-category">${escapeHTML(product.category)}</span>
+        <span class="product-category">
+          ${escapeHTML(product.category)}
+        </span>
+
         <h3>${escapeHTML(product.name)}</h3>
-        <p class="product-description">${escapeHTML(product.description || "")}</p>
+
+        <p class="product-description">
+          ${escapeHTML(product.description || "")}
+        </p>
 
         <div class="product-price">
           <strong>${money(getSalePrice(product))}</strong>
+
           ${
             Number(product.discount_percent || 0) > 0
               ? `<del>${money(product.price)}</del>`
@@ -419,18 +454,16 @@ function renderProducts() {
   `).join("");
 }
 
-if ($("search")) {
-  $("search").addEventListener("input", () => {
-    renderProducts();
-    renderOffers();
-  });
-}
+$("search")?.addEventListener("input", () => {
+  renderProducts();
+  renderOffers();
+});
 
 /* =====================================================
    PRODUCT BUTTON EVENTS
 ===================================================== */
 
-document.addEventListener("click", (event) => {
+document.addEventListener("click", event => {
   const addButton = event.target.closest("[data-add-cart]");
 
   if (addButton) {
@@ -520,7 +553,8 @@ function removeFromCart(id) {
 function getCartTotal() {
   return roundMoney(
     Object.values(cart).reduce(
-      (sum, item) => sum + Number(item.price) * Number(item.quantity),
+      (sum, item) =>
+        sum + Number(item.price) * Number(item.quantity),
       0
     )
   );
@@ -532,10 +566,13 @@ function renderCart() {
   const count = $("cart-count");
 
   const items = Object.values(cart);
-  const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const quantity = items.reduce(
+    (sum, item) => sum + item.quantity,
+    0
+  );
 
   if (count) count.textContent = quantity;
-
   if (total) total.textContent = money(getCartTotal());
 
   if (!container) return;
@@ -550,7 +587,7 @@ function renderCart() {
     return;
   }
 
-  container.innerHTML = items.map((item) => `
+  container.innerHTML = items.map(item => `
     <div class="cart-item">
       <div class="cart-item-info">
         <strong>${escapeHTML(item.name)}</strong>
@@ -620,12 +657,15 @@ function openCheckout() {
 
   if (summary) {
     summary.innerHTML = `
-      ${Object.values(cart).map((item) => `
+      ${Object.values(cart).map(item => `
         <div class="checkout-summary-row">
-          <span>${escapeHTML(item.name)} × ${item.quantity}</span>
+          <span>
+            ${escapeHTML(item.name)} × ${item.quantity}
+          </span>
           <strong>${money(item.price * item.quantity)}</strong>
         </div>
       `).join("")}
+
       <div class="checkout-summary-row checkout-total-row">
         <span>Total</span>
         <strong>${money(getCartTotal())}</strong>
@@ -644,8 +684,10 @@ function closeCheckout() {
 $("checkout-button")?.addEventListener("click", openCheckout);
 $("checkout-close")?.addEventListener("click", closeCheckout);
 
-$("checkout-modal")?.addEventListener("click", (event) => {
-  if (event.target === $("checkout-modal")) closeCheckout();
+$("checkout-modal")?.addEventListener("click", event => {
+  if (event.target === $("checkout-modal")) {
+    closeCheckout();
+  }
 });
 
 $("checkout-form")?.addEventListener("submit", placeOrder);
@@ -668,7 +710,7 @@ async function placeOrder(event) {
     return;
   }
 
-  const items = Object.values(cart).map((item) => ({
+  const items = Object.values(cart).map(item => ({
     id: item.id,
     name: item.name,
     quantity: item.quantity,
@@ -711,7 +753,7 @@ async function placeOrder(event) {
 
   if (error) {
     console.error("Order error:", error);
-    showToast("Order could not be submitted. Please try again.", "error");
+    showToast("Order could not be submitted.", "error");
     return;
   }
 
@@ -739,11 +781,11 @@ function closeLogin() {
 $("login-button")?.addEventListener("click", openLogin);
 $("login-close")?.addEventListener("click", closeLogin);
 
-$("login-modal")?.addEventListener("click", (event) => {
+$("login-modal")?.addEventListener("click", event => {
   if (event.target === $("login-modal")) closeLogin();
 });
 
-$("login-form")?.addEventListener("submit", async (event) => {
+$("login-form")?.addEventListener("submit", async event => {
   event.preventDefault();
 
   const email = $("login-email")?.value.trim();
@@ -771,7 +813,13 @@ $("login-form")?.addEventListener("submit", async (event) => {
 });
 
 $("logout-button")?.addEventListener("click", async () => {
-  await supabaseClient.auth.signOut();
+  const { error } = await supabaseClient.auth.signOut();
+
+  if (error) {
+    showToast("Could not sign out.", "error");
+    return;
+  }
+
   showToast("You have been signed out.");
 });
 
@@ -794,8 +842,8 @@ async function updateAuthUI(session) {
   if (loggedIn) {
     await checkAdminRole();
   } else {
-    $("admin-button") && ($("admin-button").hidden = true);
-    $("admin-section") && ($("admin-section").style.display = "none");
+    if ($("admin-button")) $("admin-button").hidden = true;
+    if ($("admin-section")) $("admin-section").style.display = "none";
   }
 }
 
@@ -835,7 +883,7 @@ supabaseClient.auth.onAuthStateChange((_event, session) => {
 
 function openAdmin() {
   if (!isAdmin) {
-    showToast("You do not have permission to access this area.", "error");
+    showToast("You do not have permission.", "error");
     return;
   }
 
@@ -861,7 +909,8 @@ async function loadRequests() {
   const container = $("admin-requests");
 
   if (container) {
-    container.innerHTML = `<div class="loading-state">Loading orders...</div>`;
+    container.innerHTML =
+      `<div class="loading-state">Loading orders...</div>`;
   }
 
   const { data, error } = await supabaseClient
@@ -873,7 +922,8 @@ async function loadRequests() {
     console.error("Orders loading error:", error);
 
     if (container) {
-      container.innerHTML = `<p class="error-message">Could not load orders.</p>`;
+      container.innerHTML =
+        `<p class="error-message">Could not load orders.</p>`;
     }
 
     return;
@@ -887,11 +937,17 @@ async function loadRequests() {
 
 function renderAdminStats() {
   const total = requests.length;
-  const pending = requests.filter((r) => r.status === "pending").length;
-  const completed = requests.filter((r) => r.status === "completed").length;
+
+  const pending = requests.filter(
+    r => r.status === "pending"
+  ).length;
+
+  const completed = requests.filter(
+    r => r.status === "completed"
+  ).length;
 
   const revenue = requests
-    .filter((r) => r.status === "completed")
+    .filter(r => r.status === "completed")
     .reduce((sum, r) => sum + Number(r.total || 0), 0);
 
   setText("admin-total-orders", total);
@@ -900,11 +956,11 @@ function renderAdminStats() {
   setText("admin-revenue", money(revenue));
 }
 
-document.querySelectorAll("[data-request-filter]").forEach((button) => {
+document.querySelectorAll("[data-request-filter]").forEach(button => {
   button.addEventListener("click", () => {
     currentRequestFilter = button.dataset.requestFilter;
 
-    document.querySelectorAll("[data-request-filter]").forEach((item) => {
+    document.querySelectorAll("[data-request-filter]").forEach(item => {
       item.classList.toggle("active", item === button);
     });
 
@@ -920,23 +976,26 @@ function renderRequests() {
 
   if (currentRequestFilter !== "all") {
     visible = requests.filter(
-      (request) => request.status === currentRequestFilter
+      request => request.status === currentRequestFilter
     );
   }
 
   if (!visible.length) {
-    container.innerHTML = `<div class="empty-state"><h3>No orders found</h3></div>`;
+    container.innerHTML =
+      `<div class="empty-state"><h3>No orders found</h3></div>`;
     return;
   }
 
-  container.innerHTML = visible.map((request) => {
+  container.innerHTML = visible.map(request => {
     const items = Array.isArray(request.items) ? request.items : [];
 
     return `
       <article class="admin-request-card">
         <div class="admin-request-header">
           <div>
-            <strong>Order #${escapeHTML(String(request.id).slice(0, 8))}</strong>
+            <strong>
+              Order #${escapeHTML(String(request.id).slice(0, 8))}
+            </strong>
             <p>${escapeHTML(request.minecraft_name || "Unknown player")}</p>
           </div>
 
@@ -944,8 +1003,11 @@ function renderRequests() {
             class="request-status-select"
             data-order-status="${escapeHTML(request.id)}"
           >
-            ${["pending", "processing", "completed", "cancelled"].map((status) => `
-              <option value="${status}" ${request.status === status ? "selected" : ""}>
+            ${["pending", "processing", "completed", "cancelled"].map(status => `
+              <option
+                value="${status}"
+                ${request.status === status ? "selected" : ""}
+              >
                 ${status}
               </option>
             `).join("")}
@@ -961,8 +1023,10 @@ function renderRequests() {
         </div>
 
         <div class="admin-order-items">
-          ${items.map((item) => `
-            <div>${escapeHTML(item.name || "Item")} × ${Number(item.quantity || 1)}</div>
+          ${items.map(item => `
+            <div>
+              ${escapeHTML(item.name || "Item")} × ${Number(item.quantity || 1)}
+            </div>
           `).join("")}
         </div>
       </article>
@@ -970,16 +1034,24 @@ function renderRequests() {
   }).join("");
 }
 
-document.addEventListener("change", async (event) => {
+document.addEventListener("change", async event => {
   const select = event.target.closest("[data-order-status]");
 
   if (select && isAdmin) {
-    await updateRequestStatus(select.dataset.orderStatus, select.value);
+    await updateRequestStatus(
+      select.dataset.orderStatus,
+      select.value
+    );
   }
 });
 
 async function updateRequestStatus(id, status) {
-  const allowed = ["pending", "processing", "completed", "cancelled"];
+  const allowed = [
+    "pending",
+    "processing",
+    "completed",
+    "cancelled"
+  ];
 
   if (!isAdmin || !allowed.includes(status)) return;
 
@@ -999,7 +1071,7 @@ async function updateRequestStatus(id, status) {
 }
 
 /* =====================================================
-   PRODUCT CATALOGUE ADMIN
+   PRODUCT CATALOGUE
 ===================================================== */
 
 function renderCatalogProducts() {
@@ -1008,14 +1080,15 @@ function renderCatalogProducts() {
 
   const search = ($("catalog-search")?.value || "").toLowerCase().trim();
 
-  const visible = catalogCache.filter((product) =>
+  const visible = catalogCache.filter(product =>
     !search ||
     product.name?.toLowerCase().includes(search) ||
     product.category?.toLowerCase().includes(search)
   );
 
   if (!visible.length) {
-    container.innerHTML = `<div class="empty-state"><p>No products found.</p></div>`;
+    container.innerHTML =
+      `<div class="empty-state"><p>No products found.</p></div>`;
     return;
   }
 
@@ -1035,7 +1108,7 @@ function renderCatalogProducts() {
         </thead>
 
         <tbody>
-          ${visible.map((product) => `
+          ${visible.map(product => `
             <tr>
               <td>${escapeHTML(product.name)}</td>
               <td>${escapeHTML(product.category)}</td>
@@ -1043,19 +1116,24 @@ function renderCatalogProducts() {
               <td>${getStackSize(product)}</td>
               <td>${Number(product.discount_percent || 0)}%</td>
               <td>${product.is_active ? "Active" : "Inactive"}</td>
+
               <td>
                 <div class="product-admin-actions">
                   <button
                     type="button"
                     class="secondary-button"
                     data-edit-product="${escapeHTML(product.id)}"
-                  >Edit</button>
+                  >
+                    Edit
+                  </button>
 
                   <button
                     type="button"
                     class="product-delete-button"
                     data-delete-product="${escapeHTML(product.id)}"
-                  >Delete</button>
+                  >
+                    Delete
+                  </button>
                 </div>
               </td>
             </tr>
@@ -1100,49 +1178,92 @@ function openProductEditor(productOrId) {
 
   modal.innerHTML = `
     <div class="modal product-editor-modal">
-      <button class="modal-close" type="button" id="product-editor-close">×</button>
+      <button
+        class="modal-close"
+        type="button"
+        id="product-editor-close"
+      >×</button>
 
       <div class="modal-eyebrow">PRODUCT MANAGEMENT</div>
+
       <h2>${product ? "Edit product" : "Add product"}</h2>
 
       <form id="product-editor-form">
         <label for="edit-product-name">Product name</label>
-        <input id="edit-product-name" required maxlength="100"
-          value="${escapeHTML(product?.name || "")}">
+        <input
+          id="edit-product-name"
+          required
+          maxlength="100"
+          value="${escapeHTML(product?.name || "")}"
+        >
 
         <label for="edit-product-category">Category</label>
+
         <select id="edit-product-category" required>
-          ${CATEGORIES.map((name) => `
-            <option value="${escapeHTML(name)}"
-              ${product?.category === name ? "selected" : ""}>
+          ${CATEGORIES.map(name => `
+            <option
+              value="${escapeHTML(name)}"
+              ${product?.category === name ? "selected" : ""}
+            >
               ${escapeHTML(name)}
             </option>
           `).join("")}
         </select>
 
         <label for="edit-product-description">Description</label>
-        <textarea id="edit-product-description" rows="3">${escapeHTML(product?.description || "")}</textarea>
+
+        <textarea
+          id="edit-product-description"
+          rows="3"
+        >${escapeHTML(product?.description || "")}</textarea>
 
         <label for="edit-product-price">Price (KB$)</label>
-        <input id="edit-product-price" type="number" min="0" step="0.01"
-          value="${Number(product?.price || 0)}" required>
+
+        <input
+          id="edit-product-price"
+          type="number"
+          min="0"
+          step="0.01"
+          value="${Number(product?.price || 0)}"
+          required
+        >
 
         <label for="edit-product-stack">Stack size</label>
-        <input id="edit-product-stack" type="number" min="1" max="999"
-          value="${getStackSize(product || {})}" required>
+
+        <input
+          id="edit-product-stack"
+          type="number"
+          min="1"
+          max="999"
+          value="${getStackSize(product || {})}"
+          required
+        >
 
         <label for="edit-product-discount">Discount (%)</label>
-        <input id="edit-product-discount" type="number" min="0" max="100"
-          value="${Number(product?.discount_percent || 0)}">
+
+        <input
+          id="edit-product-discount"
+          type="number"
+          min="0"
+          max="100"
+          value="${Number(product?.discount_percent || 0)}"
+        >
 
         <label for="edit-product-image">Image URL (optional)</label>
-        <input id="edit-product-image" type="url"
+
+        <input
+          id="edit-product-image"
+          type="url"
           value="${escapeHTML(product?.image_url || "")}"
-          placeholder="https://...">
+          placeholder="https://..."
+        >
 
         <label class="checkbox-label">
-          <input id="edit-product-active" type="checkbox"
-            ${product?.is_active ? "checked" : ""}>
+          <input
+            id="edit-product-active"
+            type="checkbox"
+            ${product?.is_active ? "checked" : ""}
+          >
           Product is active and visible in the shop
         </label>
 
@@ -1157,9 +1278,11 @@ function openProductEditor(productOrId) {
 
   document.body.appendChild(modal);
 
-  $("product-editor-close").addEventListener("click", () => modal.remove());
+  $("product-editor-close").addEventListener("click", () => {
+    modal.remove();
+  });
 
-  modal.addEventListener("click", (event) => {
+  modal.addEventListener("click", event => {
     if (event.target === modal) modal.remove();
   });
 
@@ -1172,7 +1295,7 @@ async function saveProduct(event) {
   if (!isAdmin) return;
 
   const name = $("edit-product-name").value.trim();
-  const category = $("edit-product-category").value;
+  const categoryValue = $("edit-product-category").value;
   const description = $("edit-product-description").value.trim();
   const price = Number($("edit-product-price").value);
   const stackSize = Number($("edit-product-stack").value);
@@ -1182,8 +1305,10 @@ async function saveProduct(event) {
 
   const message = $("product-editor-message");
 
-  if (!name || !CATEGORIES.includes(category)) {
-    if (message) message.textContent = "Please enter a valid name and category.";
+  if (!name || !CATEGORIES.includes(categoryValue)) {
+    if (message) {
+      message.textContent = "Please enter a valid name and category.";
+    }
     return;
   }
 
@@ -1192,13 +1317,22 @@ async function saveProduct(event) {
     !Number.isInteger(stackSize) || stackSize < 1 ||
     !Number.isFinite(discount) || discount < 0 || discount > 100
   ) {
-    if (message) message.textContent = "Please check price, stack size and discount.";
+    if (message) {
+      message.textContent = "Please check price, stack size and discount.";
+    }
+    return;
+  }
+
+  if (imageUrl && !safeImageUrl(imageUrl)) {
+    if (message) {
+      message.textContent = "Please enter a valid HTTP or HTTPS image URL.";
+    }
     return;
   }
 
   const payload = {
     name,
-    category,
+    category: categoryValue,
     description,
     price,
     stack_size: stackSize,
@@ -1232,7 +1366,10 @@ async function saveProduct(event) {
 
   $("product-editor-modal")?.remove();
 
-  showToast(editingProductId ? "Product updated." : "Product created.");
+  showToast(editingProductId
+    ? "Product updated."
+    : "Product created."
+  );
 
   editingProductId = null;
 
@@ -1251,7 +1388,7 @@ async function deleteProduct(id) {
   }
 
   const product = catalogCache.find(
-    (item) => String(item.id) === String(id)
+    item => String(item.id) === String(id)
   );
 
   if (!product) {
@@ -1272,7 +1409,12 @@ async function deleteProduct(id) {
 
   if (error) {
     console.error("Product deletion error:", error);
-    showToast(`Could not delete product: ${error.message}`, "error");
+
+    showToast(
+      `Could not delete product: ${error.message}`,
+      "error"
+    );
+
     return;
   }
 
@@ -1289,7 +1431,10 @@ async function deleteProduct(id) {
    CATALOGUE IMPORT
 ===================================================== */
 
-$("catalog-import-file")?.addEventListener("change", importCatalogFile);
+$("catalog-import-file")?.addEventListener(
+  "change",
+  importCatalogFile
+);
 
 async function importCatalogFile(event) {
   if (!isAdmin) return;
@@ -1309,10 +1454,11 @@ async function importCatalogFile(event) {
       }
     } else {
       const lines = content.split(/\r?\n/).filter(Boolean);
-      const headers = lines.shift().split(",").map((v) => v.trim());
+      const headers = lines.shift().split(",").map(v => v.trim());
 
-      rows = lines.map((line) => {
+      rows = lines.map(line => {
         const values = line.split(",");
+
         return Object.fromEntries(
           headers.map((header, index) => [
             header,
@@ -1323,19 +1469,25 @@ async function importCatalogFile(event) {
     }
 
     const existingNames = new Set(
-      catalogCache.map((p) => p.name.toLowerCase())
+      catalogCache.map(p => p.name.toLowerCase())
     );
 
     const newProducts = rows
-      .filter((p) => p.name && !existingNames.has(String(p.name).toLowerCase()))
-      .map((p) => ({
+      .filter(p =>
+        p.name &&
+        !existingNames.has(String(p.name).toLowerCase())
+      )
+      .map(p => ({
         name: String(p.name),
-        category: CATEGORIES.includes(p.category) ? p.category : "Items",
+        category: CATEGORIES.includes(p.category)
+          ? p.category
+          : "Items",
         description: String(p.description || ""),
         price: Number(p.price || 0),
         stack_size: Number(p.stack_size || 64),
         discount_percent: Number(p.discount_percent || 0),
-        is_active: p.is_active === true || p.is_active === "true"
+        is_active:
+          p.is_active === true || p.is_active === "true"
       }));
 
     if (!newProducts.length) {
@@ -1350,6 +1502,7 @@ async function importCatalogFile(event) {
     if (error) throw error;
 
     showToast(`${newProducts.length} products imported.`);
+
     await loadProducts();
     await loadCatalogProducts();
 
@@ -1375,6 +1528,7 @@ async function initializeShop() {
   await updateAuthUI(data?.session || null);
 
   await loadProducts();
+
   renderCart();
   showCategory("All");
 }
