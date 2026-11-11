@@ -2152,5 +2152,53 @@ select:focus-visible {
     padding: 20px;
   }
 }
+/* =========================================
+   PRODUCT ADMIN ACTIONS
+========================================= */
 
-und das meine style.css
+.product-admin-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 10;
+}
+
+.product-admin-menu,
+.product-delete-button {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #24201c;
+}
+
+.product-admin-menu {
+  color: #f5a044;
+  border: 1px solid #65421f;
+}
+
+.product-admin-menu:hover {
+  background: #38291c;
+  border-color: #f5a044;
+}
+
+.product-delete-button {
+  color: #e47b70;
+  border: 1px solid #65352f;
+}
+
+.product-delete-button:hover {
+  background: #472622;
+  border-color: #e47b70;
+  transform: translateY(-1px);
+}
