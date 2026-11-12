@@ -94,7 +94,7 @@ const textureAliases = {
   "Sand": "sand",
   "Oak Log": "oak_log",
   "Ender Pearl": "ender_pearl",
-  "Acacia Door": "acacia_door_bottom",
+   "Acacia Door": "acacia_door_bottom",
   "Acacia Fence": "acacia_fence",
   "Acacia Fence Gate": "acacia_fence_gate",
   "Acacia Stairs": "acacia_planks",
@@ -186,22 +186,37 @@ function getTextureCandidates(product, colorId = null) {
 
   const name = String(product?.name || "").toLowerCase();
 
-  // Beds use entity textures instead of normal block/item textures.
+  // Beds use a separate entity texture.
   if (/\bbed\b/.test(name)) {
-    const bedColor = minecraftColors.find(color =>
-      new RegExp(`\\b${color.name.toLowerCase().replace(/ /g, "\\s+")}\\b`).test(name)
+    const color = minecraftColors.find(c =>
+      name.includes(c.name.toLowerCase())
     );
 
-    const selectedColor = bedColor?.id || "red";
-
     return [
-      `${base}/entity/bed/${selectedColor}.png`
+      `${base}/entity/bed/${color?.id || "red"}.png`
     ];
   }
 
+  // These textures belong in the block folder,
+  // even if the product is categorized as an item.
+  const blockTextures = [
+    "anvil",
+    "chipped_anvil",
+    "damaged_anvil",
+    "acacia_door_bottom",
+    "birch_door_bottom",
+    "oak_door_bottom",
+    "spruce_door_bottom",
+    "jungle_door_bottom",
+    "dark_oak_door_bottom",
+    "mangrove_door_bottom",
+    "cherry_door_bottom"
+  ];
+
   const isBlock =
     product.category === "Blocks" ||
-    product.category === "Redstone";
+    product.category === "Redstone" ||
+    blockTextures.includes(texture);
 
   const firstType = isBlock ? "block" : "item";
   const secondType = isBlock ? "item" : "block";
