@@ -2497,3 +2497,433 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* =========================================
+   RESPONSIVE DESIGN
+   Brat Ltd. — Mobile & Tablet
+========================================= */
+
+/* ---------- TABLETS ---------- */
+
+@media (max-width: 1024px) {
+
+  .container,
+  .main-container,
+  main {
+    width: 94%;
+    max-width: 100%;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .offers-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-dashboard,
+  .admin-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero {
+    padding: 55px 25px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+  }
+
+  .product-card img,
+  .product-image {
+    max-width: 100%;
+  }
+
+  .admin-table-wrapper,
+  .table-wrapper {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .admin-table,
+  table {
+    min-width: 650px;
+  }
+}
+
+
+/* ---------- SMALL TABLETS / LARGE PHONES ---------- */
+
+@media (max-width: 768px) {
+
+  body {
+    font-size: 15px;
+  }
+
+  header {
+    padding: 12px 16px;
+  }
+
+  .header,
+  .header-content,
+  .navbar,
+  .nav-container {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  nav,
+  .navigation,
+  .nav-links {
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: thin;
+    padding-bottom: 6px;
+  }
+
+  nav a,
+  .nav-links a,
+  .nav-link {
+    flex-shrink: 0;
+  }
+
+  .hero {
+    padding: 42px 20px;
+    border-radius: 14px;
+  }
+
+  .hero h1 {
+    font-size: 2.2rem;
+    line-height: 1.15;
+  }
+
+  .hero p {
+    font-size: 0.95rem;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 13px;
+  }
+
+  .offers-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .product-card {
+    min-width: 0;
+  }
+
+  .product-card h3,
+  .product-card .product-name {
+    font-size: 0.95rem;
+  }
+
+  .product-card button {
+    width: 100%;
+  }
+
+  .section-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .cart-layout,
+  .checkout-layout,
+  .account-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .cart-summary {
+    position: static;
+  }
+
+  .admin-dashboard,
+  .admin-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .admin-panel {
+    padding: 16px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-content,
+  .product-modal,
+  .dialog {
+    width: 94%;
+    max-width: 94%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .color-picker {
+    gap: 8px;
+  }
+
+  .color-option {
+    width: 30px;
+    height: 30px;
+  }
+
+  input,
+  select,
+  textarea {
+    max-width: 100%;
+  }
+}
+
+
+/* ---------- SMARTPHONES ---------- */
+
+@media (max-width: 480px) {
+
+  body {
+    font-size: 14px;
+  }
+
+  .container,
+  .main-container,
+  main {
+    width: 94%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  header {
+    padding: 10px 12px;
+  }
+
+  .logo {
+    font-size: 1.2rem;
+  }
+
+  .hero {
+    padding: 32px 16px;
+    margin-top: 15px;
+  }
+
+  .hero h1 {
+    font-size: 1.8rem;
+  }
+
+  .hero p {
+    font-size: 0.9rem;
+  }
+
+  .hero button,
+  .hero .btn {
+    width: 100%;
+  }
+
+  .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .offers-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .product-card {
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  .product-card img,
+  .product-image {
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+
+  .product-card h3,
+  .product-card .product-name {
+    font-size: 0.85rem;
+  }
+
+  .product-card p {
+    font-size: 0.8rem;
+  }
+
+  .product-card button {
+    font-size: 0.78rem;
+    padding: 9px 6px;
+  }
+
+  .price {
+    font-size: 1rem;
+  }
+
+  .section-title,
+  .section-header h2 {
+    font-size: 1.35rem;
+  }
+
+  .category-nav,
+  .category-tabs {
+    display: flex;
+    overflow-x: auto;
+    white-space: nowrap;
+    gap: 8px;
+    padding-bottom: 8px;
+    scrollbar-width: thin;
+  }
+
+  .category-nav button,
+  .category-tabs button {
+    flex-shrink: 0;
+  }
+
+  .search-bar,
+  .search-container {
+    width: 100%;
+  }
+
+  .search-bar input,
+  .search-container input {
+    width: 100%;
+  }
+
+  .cart-item {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .cart-item img {
+    width: 48px;
+    height: 48px;
+  }
+
+  .cart-summary {
+    padding: 15px;
+  }
+
+  .admin-dashboard,
+  .admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-stat {
+    padding: 15px;
+  }
+
+  .admin-panel {
+    padding: 12px;
+  }
+
+  .admin-actions {
+    flex-wrap: wrap;
+  }
+
+  .admin-actions button {
+    flex: 1;
+  }
+
+  .modal-content,
+  .product-modal,
+  .dialog {
+    width: 96%;
+    max-width: 96%;
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .form-group {
+    width: 100%;
+  }
+
+  input,
+  select,
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 16px;
+  }
+
+  .color-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .color-option {
+    width: 28px;
+    height: 28px;
+  }
+
+  footer {
+    padding: 25px 15px;
+    text-align: center;
+  }
+}
+
+
+/* ---------- VERY SMALL SCREENS ---------- */
+
+@media (max-width: 360px) {
+
+  .product-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero h1 {
+    font-size: 1.55rem;
+  }
+
+  .product-card {
+    padding: 12px;
+  }
+
+  .admin-stat h3 {
+    font-size: 1.2rem;
+  }
+
+  .btn,
+  button {
+    max-width: 100%;
+  }
+}
+
+
+/* ---------- TOUCH OPTIMIZATION ---------- */
+
+@media (hover: none) and (pointer: coarse) {
+
+  button,
+  .btn,
+  a,
+  .color-option {
+    min-height: 40px;
+  }
+
+  .product-card:hover {
+    transform: none;
+  }
+
+  button:hover {
+    transform: none;
+  }
+}
+
+
+/* ---------- GENERAL OVERFLOW PROTECTION ---------- */
+
+img {
+  max-width: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
