@@ -182,7 +182,7 @@ function getTextureCandidates(product, colorId = null) {
   const texture = getProductTexture(product, colorId);
 
   const base =
-    "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures";
+    "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/26.1/assets/minecraft/textures";
 
   const isBlock =
     product.category === "Blocks" ||
@@ -493,6 +493,178 @@ function getCartTotals() {
     total: afterQuantity,
     checkoutTotal: roundMoney(afterQuantity)
   };
+}
+
+/* =========================================
+   RENDER CART
+========================================= */
+
+function renderCart() {
+  const container = $("cart-items");
+  const totalContainer = $("cart-total");
+
+  if (!container) return;
+
+  const entries = Object.entries(cart)
+    .map(([key, quantity]) => ({
+      key,
+      quantity: Number(quantity),
+      entry: getCartEntry(key)
+    }))
+    .filter(item =>
+      item.quantity > 0 && item.entry
+    );
+
+  // Cart item count
+  const count = entries.reduce(
+    (sum, item) => sum + item.quantity,
+    0
+  );
+
+  setText("cart-count", count);
+
+  // Empty cart
+  if (!entries.length) {
+    container.innerHTML = `
+      <div class="empty-cart">
+        <div class="empty-icon">🛒</div>
+        <p>Your cart is empty.</p>
+      </div>
+    `;
+
+    if (totalContainer) {
+      totalContainer.innerHTML = "";
+    }
+
+    const checkoutButton = $("checkout-button");
+    if (checkoutButton) checkoutButton.disabled = true;
+
+    return;
+  }
+
+  const checkoutButton = $("checkout-button");
+  if (checkoutButton) checkoutButton.disabled = false;
+
+  // Render products
+  container.innerHTML = entries.map(item => {
+    const { key, quantity, entry } = item;
+    const { product, colorId } = entry;
+
+    const displayName = getVariantDisplayName(
+      product,
+      colorId
+    );
+
+    const discount = getDiscountPercent(quantity);
+    const unitPrice = getSalePrice(product);
+
+    const totalPrice =
+      unitPrice * quantity * (1 - discount / 100);
+
+    return `
+      <div class="cart-item">
+
+        <div class="cart-item-image">
+          ${imageMarkup(
+            product,
+            "cart-product-image",
+            colorId
+          )}
+        </div>
+
+        <div class="cart-item-details">
+
+          <h3>${escapeHTML(displayName)}</h3>
+
+          <div class="cart-item-price">
+            ${money(totalPrice)}
+          </div>
+
+          <div class="quantity-controls">
+
+            <button
+              type="button"
+              data-cart-key="${escapeHTML(key)}"
+              data-change="-1"
+              aria-label="Decrease quantity"
+            >−</button>
+
+            <span>${quantity}</span>
+
+            <button
+              type="button"
+              data-cart-key="${escapeHTML(key)}"
+              data-change="1"
+              aria-label="Increase quantity"
+            >+</button>
+
+          </div>
+
+          <button
+            type="button"
+            class="remove-cart-item"
+            data-remove-cart="${escapeHTML(key)}"
+          >
+            Remove
+          </button>
+
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  // Quantity buttons
+  container.querySelectorAll("[data-cart-key]")
+    .forEach(button => {
+      button.addEventListener("click", () => {
+        changeQuantity(
+          button.dataset.cartKey,
+          Number(button.dataset.change)
+        );
+      });
+    });
+
+  // Remove buttons
+  container.querySelectorAll("[data-remove-cart]")
+    .forEach(button => {
+      button.addEventListener("click", () => {
+        delete cart[button.dataset.removeCart];
+
+        saveCart();
+        renderCart();
+      });
+    });
+
+  // Cart totals
+  const totals = getCartTotals();
+
+  if (totalContainer) {
+    totalContainer.innerHTML = `
+      <div class="total-line">
+        <span>Subtotal</span>
+        <span>${money(totals.original)}</span>
+      </div>
+
+      ${totals.manualSavings > 0 ? `
+        <div class="total-line discount-line">
+          <span>Product discounts</span>
+          <span>-${money(totals.manualSavings)}</span>
+        </div>
+      ` : ""}
+
+      ${totals.quantitySavings > 0 ? `
+        <div class="total-line discount-line">
+          <span>Quantity discounts</span>
+          <span>-${money(totals.quantitySavings)}</span>
+        </div>
+      ` : ""}
+
+      <div class="total-line grand-total">
+        <span>Total</span>
+        <strong>${checkoutMoney(totals.total)}</strong>
+      </div>
+    `;
+  }
 }
 
 /* =========================================
