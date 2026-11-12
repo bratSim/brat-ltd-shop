@@ -1,4 +1,3 @@
-
 const supabaseClient = window.supabase.createClient(
   window.SUPABASE_URL,
   window.SUPABASE_KEY
@@ -439,7 +438,6 @@ function renderOffers() {
     });
   });
 }
-
 /* =========================================
    PRODUCT DISPLAY
 ========================================= */
@@ -666,8 +664,11 @@ function openProductEditor(productOrId) {
         <label>Product name</label>
 
         <input
+          id="edit-product-name"
+          type="text"
+          maxlength="100"
           value="${escapeHTML(product.name)}"
-          disabled
+          required
         >
 
         <label>Category</label>
@@ -756,11 +757,13 @@ function openProductEditor(productOrId) {
     async event => {
       event.preventDefault();
 
+      const name = $("edit-product-name").value.trim();
       const price = Number($("edit-product-price").value);
       const discount = Number($("edit-product-discount").value);
       const stackSize = Number($("edit-product-stack").value);
 
       if (
+        !name ||
         !Number.isFinite(price) ||
         price < 0 ||
         !Number.isInteger(discount) ||
@@ -786,6 +789,7 @@ function openProductEditor(productOrId) {
       const { error } = await supabaseClient
         .from("products")
         .update({
+          name,
           price,
           discount_percent: discount,
           stack_size: stackSize,
@@ -813,7 +817,6 @@ function openProductEditor(productOrId) {
     }
   );
 }
-
 /* =========================================
    DELETE PRODUCT
 ========================================= */
@@ -1067,7 +1070,6 @@ function renderCart() {
     `;
   }
 }
-
 /* =========================================
    CART OPEN / CLOSE
 ========================================= */
@@ -1433,8 +1435,7 @@ function renderServiceForm() {
 
       <form id="service-form">
         <label for="service-title">Service title</label>
-
-        <input
+                <input
           id="service-title"
           type="text"
           maxlength="100"
@@ -1795,7 +1796,6 @@ if ($("login-modal")) {
     }
   });
 }
-
 /* =========================================
    SIGN IN
 ========================================= */
@@ -2183,7 +2183,7 @@ function renderRequests() {
     const itemList = items.map(item => `
       <div class="request-item">
         <span>${escapeHTML(item.name || "Unknown item")}</span>
-        <span>× ${Number(item.quantity || 1)}</span>
+                <span>× ${Number(item.quantity || 1)}</span>
       </div>
     `).join("");
 
@@ -2624,7 +2624,6 @@ if ($("catalog-add-button")) {
     createCatalogProduct
   );
 }
-
 /* =========================================
    IMPORT PRODUCTS FROM JSON OR CSV
 ========================================= */
