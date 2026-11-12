@@ -94,12 +94,12 @@ const textureAliases = {
   "Sand": "sand",
   "Oak Log": "oak_log",
   "Ender Pearl": "ender_pearl",
-  "Acacia Door": "acacia_door",
+  "Acacia Door": "acacia_door_bottom",
   "Acacia Fence": "acacia_fence",
   "Acacia Fence Gate": "acacia_fence_gate",
-  "Acacia Stairs": "acacia_stairs",
+  "Acacia Stairs": "acacia_planks",
   "Armor Stand": "armor_stand",
-  "Birch Door": "birch_door",
+  "Birch Door": "birch_door_bottom",
   "Bookshelf": "bookshelf",
   "Brewing Stand": "brewing_stand"
 };
@@ -183,6 +183,21 @@ function getTextureCandidates(product, colorId = null) {
 
   const base =
     "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/26.1/assets/minecraft/textures";
+
+  const name = String(product?.name || "").toLowerCase();
+
+  // Beds use entity textures instead of normal block/item textures.
+  if (/\bbed\b/.test(name)) {
+    const bedColor = minecraftColors.find(color =>
+      new RegExp(`\\b${color.name.toLowerCase().replace(/ /g, "\\s+")}\\b`).test(name)
+    );
+
+    const selectedColor = bedColor?.id || "red";
+
+    return [
+      `${base}/entity/bed/${selectedColor}.png`
+    ];
+  }
 
   const isBlock =
     product.category === "Blocks" ||
