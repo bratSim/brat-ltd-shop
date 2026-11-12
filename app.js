@@ -93,40 +93,319 @@ const textureAliases = {
   "Glass": "glass",
   "Sand": "sand",
   "Oak Log": "oak_log",
-  "Ender Pearl": "ender_pearl"
+  "Ender Pearl": "ender_pearl",
+  "Acacia Door": "acacia_door",
+  "Acacia Fence": "acacia_fence",
+  "Acacia Fence Gate": "acacia_fence_gate",
+  "Acacia Stairs": "acacia_stairs",
+  "Armor Stand": "armor_stand",
+  "Birch Door": "birch_door",
+  "Bookshelf": "bookshelf",
+  "Brewing Stand": "brewing_stand"
 };
 
+Object.keys(textureAliases).forEach(key => {
+  textureAliases[key.toLowerCase()] = textureAliases[key];
+});
+
+const minecraftColors = [
+  { name: "White", id: "white", hex: "#e9ecec" },
+  { name: "Orange", id: "orange", hex: "#f07613" },
+  { name: "Magenta", id: "magenta", hex: "#bd44b3" },
+  { name: "Light Blue", id: "light_blue", hex: "#3ab3da" },
+  { name: "Yellow", id: "yellow", hex: "#fed83d" },
+  { name: "Lime", id: "lime", hex: "#80c71f" },
+  { name: "Pink", id: "pink", hex: "#f38baa" },
+  { name: "Gray", id: "gray", hex: "#474f52" },
+  { name: "Light Gray", id: "light_gray", hex: "#9d9d97" },
+  { name: "Cyan", id: "cyan", hex: "#169c9c" },
+  { name: "Purple", id: "purple", hex: "#8932b8" },
+  { name: "Blue", id: "blue", hex: "#3c44aa" },
+  { name: "Brown", id: "brown", hex: "#835432" },
+  { name: "Green", id: "green", hex: "#5e7c16" },
+  { name: "Red", id: "red", hex: "#b02e26" },
+  { name: "Black", id: "black", hex: "#1d1d21" }
+];
+
 function getTextureName(name) {
-  const alias = textureAliases[name];
+  const normalized = String(name || "").trim().toLowerCase();
+  const alias = textureAliases[normalized];
 
   if (alias) return alias;
 
-  return String(name || "")
-    .toLowerCase()
+  return normalized
+    .replace(/[’']/g, "")
     .replace(/[^a-z0-9 ]/g, "")
     .trim()
     .replace(/\s+/g, "_");
 }
 
-function productImage(product) {
-  const texture = getTextureName(product.name);
-  const isBlock = product.category === "Blocks";
-  const textureType = isBlock ? "block" : "item";
+function getColorFamily(product) {
+  const name = String(product?.name || "").toLowerCase();
 
-  return `https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures/${textureType}/${texture}.png`;
+  if (/\bwool\b/.test(name)) return "wool";
+  if (/\bconcrete powder\b/.test(name)) return "concrete_powder";
+  if (/\bconcrete\b/.test(name)) return "concrete";
+  if (/\bstained glass pane\b/.test(name)) return "stained_glass_pane";
+  if (/\bstained glass\b/.test(name)) return "stained_glass";
+  if (/\bterracotta\b/.test(name)) return "terracotta";
+  if (/\bcarpet\b/.test(name)) return "carpet";
+
+  return null;
 }
 
-function imageMarkup(product, className = "product-image") {
+function getProductTexture(product, colorId = null) {
+  const family = getColorFamily(product);
+
+  if (colorId && family) {
+    return `${colorId}_${family}`;
+  }
+
+  if (family && family !== "terracotta") {
+    const name = String(product.name || "").toLowerCase();
+
+    const hasExplicitColor = minecraftColors.some(color =>
+      new RegExp(
+        `\\b${color.name.toLowerCase().replace(/ /g, "\\s+")}\\b`
+      ).test(name)
+    );
+
+    if (!hasExplicitColor) {
+      return `white_${family}`;
+    }
+  }
+
+  return getTextureName(product.name);
+}
+
+function getTextureCandidates(product, colorId = null) {
+  const texture = getProductTexture(product, colorId);
+
+  const base =
+    "https://raw.githubusercontent.com/InventivetalentDev/minecraft-assets/1.21.4/assets/minecraft/textures";
+
+  const isBlock =
+    product.category === "Blocks" ||
+    product.category === "Redstone";
+
+  const firstType = isBlock ? "block" : "item";
+  const secondType = isBlock ? "item" : "block";
+
+  return [
+    `${base}/${firstType}/${texture}.png`,
+    `${base}/${secondType}/${texture}.png`
+  ];
+}
+
+function productImage(product, colorId = null) {
+  return getTextureCandidates(product, colorId)[0];
+}
+
+function handleProductImageError(image) {
+  try {
+    const candidates = JSON.parse(
+      image.dataset.imageCandidates || "[]"
+    );
+
+    const nextIndex =
+      Number(image.dataset.imageIndex || 0) + 1;
+
+    if (nextIndex < candidates.length) {
+      image.dataset.imageIndex = String(nextIndex);
+      image.src = candidates[nextIndex];
+      return;
+    }
+  } catch (error) {
+    console.warn("Could not load product textures.", error);
+  }
+
+  image.style.display = "none";
+
+  const fallback = image.nextElementSibling;
+
+  if (fallback) {
+    fallback.style.display = "flex";
+  }
+}
+
+function imageMarkup(
+  product,
+  className = "product-image",
+  colorId = null
+) {
+  const candidates = getTextureCandidates(product, colorId);
+
   return `
     <img
       class="${className}"
-      src="${productImage(product)}"
+      src="${candidates[0]}"
+      data-image-candidates="${escapeHTML(JSON.stringify(candidates))}"
+      data-image-index="0"
       alt="${escapeHTML(product.name)}"
       loading="lazy"
-      onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"
+      onerror="handleProductImageError(this)"
     >
+
     <div class="fallback-icon" style="display:none;">▦</div>
   `;
+}
+
+/* =========================================
+   PRODUCT COLOR VARIANTS
+========================================= */
+
+function getCartEntry(key) {
+  const rawKey = String(key);
+  const marker = "::color::";
+  const markerIndex = rawKey.indexOf(marker);
+
+  const productId = markerIndex >= 0
+    ? rawKey.slice(0, markerIndex)
+    : rawKey;
+
+  const colorId = markerIndex >= 0
+    ? rawKey.slice(markerIndex + marker.length)
+    : null;
+
+  const product = products.find(
+    item => String(item.id) === String(productId)
+  );
+
+  return product
+    ? { product, colorId, key: rawKey }
+    : null;
+}
+
+function getCartKey(productId, colorId = null) {
+  return colorId
+    ? `${productId}::color::${colorId}`
+    : String(productId);
+}
+
+function getVariantLabel(colorId) {
+  return minecraftColors.find(
+    color => color.id === colorId
+  )?.name || "";
+}
+
+function getVariantDisplayName(product, colorId) {
+  if (!colorId) return product.name;
+
+  const colorName = getVariantLabel(colorId);
+
+  const baseName = String(product.name || "").replace(
+    new RegExp(
+      "^" + colorName.split(" ").join("\\s+") + "\\s+",
+      "i"
+    ),
+    ""
+  );
+
+  return `${colorName} ${baseName}`;
+}
+
+function openColorPicker(productId) {
+  const product = products.find(
+    item => String(item.id) === String(productId)
+  );
+
+  if (!product || product.isService) return;
+
+  if (!getColorFamily(product)) {
+    addProductVariantToCart(product, null);
+    return;
+  }
+
+  const existing = $("color-picker-modal");
+
+  if (existing) existing.remove();
+
+  const modal = document.createElement("div");
+
+  modal.id = "color-picker-modal";
+  modal.className = "modal-overlay active";
+
+  modal.innerHTML = `
+    <div class="modal color-picker-modal">
+
+      <div class="modal-header">
+        <div>
+          <div class="modal-eyebrow">
+            CHOOSE YOUR VARIANT
+          </div>
+
+          <h2>${escapeHTML(product.name)}</h2>
+
+          <p class="color-picker-description">
+            Select a Minecraft color before adding this product to your cart.
+          </p>
+        </div>
+
+        <button
+          class="modal-close"
+          id="close-color-picker"
+          type="button"
+        >×</button>
+      </div>
+
+      <div class="color-options-grid">
+
+        ${minecraftColors.map(color => `
+          <button
+            class="color-option"
+            type="button"
+            data-color-id="${color.id}"
+            title="${color.name}"
+          >
+            <span
+              class="color-swatch"
+              style="--swatch-color:${color.hex};"
+            ></span>
+
+            <span>${color.name}</span>
+          </button>
+        `).join("")}
+
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  $("close-color-picker").addEventListener("click", () => {
+    modal.remove();
+  });
+
+  modal.addEventListener("click", event => {
+    if (event.target === modal) {
+      modal.remove();
+    }
+  });
+
+  modal.querySelectorAll("[data-color-id]").forEach(button => {
+    button.addEventListener("click", () => {
+      addProductVariantToCart(
+        product,
+        button.dataset.colorId
+      );
+
+      modal.remove();
+    });
+  });
+}
+
+function addProductVariantToCart(product, colorId = null) {
+  const key = getCartKey(product.id, colorId);
+
+  cart[key] = Number(cart[key] || 0) + 1;
+
+  saveCart();
+  renderCart();
+  openCart();
+
+  showToast(
+    `${getVariantDisplayName(product, colorId)} added to cart.`
+  );
 }
 
 /* =========================================
@@ -168,12 +447,12 @@ function getCartTotals() {
   let afterQuantity = 0;
   let serviceTotal = 0;
 
-  for (const [id, quantity] of Object.entries(cart)) {
-    const product = products.find(
-      item => String(item.id) === String(id)
-    );
+  for (const [key, quantity] of Object.entries(cart)) {
+    const entry = getCartEntry(key);
 
-    if (!product) continue;
+    if (!entry) continue;
+
+    const { product } = entry;
 
     if (product.isService) {
       const budget = Number(product.desiredPrice || 0);
@@ -338,6 +617,7 @@ function showCategory(nextCategory) {
 }
 
 /* Delegated navigation click handler */
+
 document.addEventListener("click", event => {
   const link = event.target.closest(".nav-link");
 
@@ -438,6 +718,7 @@ function renderOffers() {
     });
   });
 }
+
 /* =========================================
    PRODUCT DISPLAY
 ========================================= */
@@ -606,7 +887,6 @@ if ($("search")) {
     renderProducts();
   });
 }
-
 /* =========================================
    PRODUCT EDITOR
 ========================================= */
@@ -817,6 +1097,7 @@ function openProductEditor(productOrId) {
     }
   );
 }
+
 /* =========================================
    DELETE PRODUCT
 ========================================= */
@@ -855,9 +1136,12 @@ async function deleteProduct(productId) {
 
     if (error) throw error;
 
-    Object.keys(cart).forEach(id => {
-      if (String(id) === String(productId)) {
-        delete cart[id];
+    Object.keys(cart).forEach(key => {
+      if (
+        String(key) === String(productId) ||
+        String(key).startsWith(`${productId}::color::`)
+      ) {
+        delete cart[key];
       }
     });
 
@@ -896,21 +1180,17 @@ function saveCart() {
   localStorage.setItem("bratCart", JSON.stringify(cart));
 }
 
+/* =========================================
+   ADD TO CART
+========================================= */
+
 function addToCart(id) {
-  const product = products.find(
-    item => String(item.id) === String(id)
-  );
-
-  if (!product || product.isService) return;
-
-  cart[id] = Number(cart[id] || 0) + 1;
-
-  saveCart();
-  renderCart();
-  openCart();
-
-  showToast(`${product.name} added to cart.`);
+  openColorPicker(id);
 }
+
+/* =========================================
+   CHANGE QUANTITY
+========================================= */
 
 function changeQuantity(id, change) {
   const next = Number(cart[id] || 0) + change;
@@ -925,151 +1205,6 @@ function changeQuantity(id, change) {
   renderCart();
 }
 
-/* =========================================
-   CART DISPLAY
-========================================= */
-
-function renderCart() {
-  const container = $("cart-items");
-
-  if (!container) return;
-
-  const entries = Object.entries(cart).filter(([id, quantity]) =>
-    Number(quantity) > 0 &&
-    products.some(item =>
-      String(item.id) === String(id)
-    )
-  );
-
-  const count = entries.reduce(
-    (sum, [, quantity]) => sum + Number(quantity),
-    0
-  );
-
-  setText("cart-count", count);
-
-  if (!entries.length) {
-    container.innerHTML = `
-      <div class="empty-cart">
-        <div class="empty-icon">🛒</div>
-        <p>Your cart is empty.</p>
-      </div>
-    `;
-
-    if ($("cart-total")) {
-      $("cart-total").innerHTML = `
-        <div class="total-line grand-total">
-          <span>Total</span>
-          <strong>0 KB$</strong>
-        </div>
-      `;
-    }
-
-    return;
-  }
-
-  container.innerHTML = entries.map(([id, quantity]) => {
-    const product = products.find(
-      item => String(item.id) === String(id)
-    );
-
-    if (!product) return "";
-
-    const stacks = Number(quantity);
-    const discount = getDiscountPercent(stacks);
-    const manualDiscount = getManualDiscount(product);
-
-    const finalPrice =
-      getSalePrice(product) *
-      stacks *
-      (1 - discount / 100);
-
-    return `
-      <div class="cart-item">
-        <div class="cart-item-image">
-          ${imageMarkup(product, "cart-product-image")}
-        </div>
-
-        <div class="cart-item-details">
-          <h3>${escapeHTML(product.name)}</h3>
-
-          <div class="cart-item-price">
-            ${money(finalPrice)}
-          </div>
-
-          ${manualDiscount > 0 ? `
-            <div class="discount-note">
-              Product discount: ${manualDiscount}%
-            </div>
-          ` : ""}
-
-          ${discount > 0 ? `
-            <div class="discount-note">
-              Quantity discount: ${discount}%
-            </div>
-          ` : ""}
-
-          <div class="quantity-controls">
-            <button
-              data-quantity="${escapeHTML(id)}"
-              data-change="-1"
-              type="button"
-              aria-label="Decrease quantity"
-            >−</button>
-
-            <span>${stacks}</span>
-
-            <button
-              data-quantity="${escapeHTML(id)}"
-              data-change="1"
-              type="button"
-              aria-label="Increase quantity"
-            >+</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
-
-  container.querySelectorAll("[data-quantity]").forEach(button => {
-    button.addEventListener("click", () => {
-      changeQuantity(
-        button.dataset.quantity,
-        Number(button.dataset.change)
-      );
-    });
-  });
-
-  const totals = getCartTotals();
-
-  if ($("cart-total")) {
-    $("cart-total").innerHTML = `
-      <div class="total-line">
-        <span>Subtotal</span>
-        <span>${money(totals.original)}</span>
-      </div>
-
-      ${totals.manualSavings > 0 ? `
-        <div class="total-line discount-line">
-          <span>Product discounts</span>
-          <span>-${money(totals.manualSavings)}</span>
-        </div>
-      ` : ""}
-
-      ${totals.quantitySavings > 0 ? `
-        <div class="total-line discount-line">
-          <span>Quantity discounts</span>
-          <span>-${money(totals.quantitySavings)}</span>
-        </div>
-      ` : ""}
-
-      <div class="total-line grand-total">
-        <span>Total</span>
-        <strong>${checkoutMoney(totals.total)}</strong>
-      </div>
-    `;
-  }
-}
 /* =========================================
    CART OPEN / CLOSE
 ========================================= */
@@ -1111,11 +1246,9 @@ if ($("cart-overlay")) {
 ========================================= */
 
 function openCheckout() {
-  const entries = Object.entries(cart).filter(([id, quantity]) =>
+  const entries = Object.entries(cart).filter(([key, quantity]) =>
     Number(quantity) > 0 &&
-    products.some(product =>
-      String(product.id) === String(id)
-    )
+    Boolean(getCartEntry(key))
   );
 
   if (!entries.length) {
@@ -1242,15 +1375,15 @@ function validateCheckout(values) {
 
 function buildOrderItems() {
   return Object.entries(cart)
-    .filter(([id, quantity]) => Number(quantity) > 0)
-    .map(([id, quantity]) => {
-      const product = products.find(
-        item => String(item.id) === String(id)
-      );
+    .filter(([, quantity]) => Number(quantity) > 0)
+    .map(([key, quantity]) => {
+      const entry = getCartEntry(key);
 
-      if (!product || product.isService) {
-        return null;
-      }
+      if (!entry) return null;
+
+      const { product, colorId } = entry;
+
+      if (product.isService) return null;
 
       const stacks = Number(quantity);
       const stackPrice = Number(product.price || 0);
@@ -1267,7 +1400,7 @@ function buildOrderItems() {
 
       return {
         id: product.id,
-        name: product.name,
+        name: getVariantDisplayName(product, colorId),
         type: "product",
         category: product.category,
         quantity: stacks,
@@ -1275,6 +1408,13 @@ function buildOrderItems() {
         price_per_stack: stackPrice,
         manual_discount: manualDiscount,
         quantity_discount: quantityDiscount,
+
+        // Color variant information
+        variant_color: colorId,
+        variant_color_name: colorId
+          ? getVariantLabel(colorId)
+          : null,
+
         total: Number(finalPrice.toFixed(2))
       };
     })
@@ -1405,7 +1545,6 @@ async function placeOrder(event) {
 if ($("checkout-form")) {
   $("checkout-form").addEventListener("submit", placeOrder);
 }
-
 /* =========================================
    SERVICE REQUEST FORM
 ========================================= */
@@ -1415,111 +1554,138 @@ function renderServiceForm() {
 
   if (!container) return;
 
-  if ($("service-request-form")) return;
-
   container.innerHTML = `
-    <div
-      class="service-request-card"
-      id="service-request-form"
-    >
-      <div class="eyebrow">BRAT LTD. SERVICES</div>
+    <div class="service-page">
 
-      <h2>
-        Request a <span class="orange">custom service.</span>
-      </h2>
+      <div class="service-intro">
+        <div class="modal-eyebrow">BRAT LTD. SERVICES</div>
 
-      <p>
-        Tell us what you need. Our team will review your request
-        and get back to you.
-      </p>
+        <h2>
+          Need something <span class="orange">special?</span>
+        </h2>
 
-      <form id="service-form">
-        <label for="service-title">Service title</label>
-                <input
-          id="service-title"
-          type="text"
-          maxlength="100"
-          placeholder="e.g. Custom building project"
-          required
-        >
+        <p>
+          Request custom builds, deliveries or other services
+          directly from our team.
+        </p>
+      </div>
 
-        <label for="service-player">Minecraft username</label>
+      <form id="service-request-form" class="service-form">
 
-        <input
-          id="service-player"
-          type="text"
-          maxlength="32"
-          placeholder="Your Minecraft username"
-          required
-        >
+        <div class="form-group">
+          <label for="service-title">Request title</label>
 
-        <label for="service-description">Description</label>
-
-        <textarea
-          id="service-description"
-          maxlength="3000"
-          placeholder="Describe your project and requirements..."
-          required
-        ></textarea>
-
-        <div class="form-row">
-          <div>
-            <label for="service-budget">Budget (KB$)</label>
-
-            <input
-              id="service-budget"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Optional"
-            >
-          </div>
-
-          <div>
-            <label for="service-deadline">Desired deadline</label>
-
-            <input
-              id="service-deadline"
-              type="date"
-              min="${new Date().toISOString().split("T")[0]}"
-            >
-          </div>
+          <input
+            id="service-title"
+            type="text"
+            maxlength="100"
+            placeholder="What do you need?"
+            required
+          >
         </div>
 
-        <label for="service-links">Reference links</label>
+        <div class="form-group">
+          <label for="service-type">Service type</label>
 
-        <textarea
-          id="service-links"
-          maxlength="1500"
-          placeholder="Add one link per line..."
-        ></textarea>
+          <select id="service-type" required>
+            <option value="">Select a service</option>
+            <option value="Building">Building</option>
+            <option value="Delivery">Delivery</option>
+            <option value="Mining">Mining</option>
+            <option value="Redstone">Redstone</option>
+            <option value="Custom">Other / Custom</option>
+          </select>
+        </div>
 
-        <label for="service-images">Reference images</label>
+        <div class="form-group">
+          <label for="service-description">
+            Description
+          </label>
 
-        <input
-          id="service-images"
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          multiple
-        >
+          <textarea
+            id="service-description"
+            rows="5"
+            maxlength="3000"
+            placeholder="Describe your request in detail..."
+            required
+          ></textarea>
+        </div>
 
-        <p class="form-hint">
-          You can upload up to 5 images. Maximum 5 MB per image.
-        </p>
+        <div class="form-group">
+          <label for="service-budget">
+            Your budget (KB$)
+          </label>
+
+          <input
+            id="service-budget"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="Optional"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="service-links">
+            Reference links
+          </label>
+
+          <textarea
+            id="service-links"
+            rows="2"
+            placeholder="Paste links, one per line..."
+          ></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="service-images">
+            Reference images
+          </label>
+
+          <input
+            id="service-images"
+            type="file"
+            accept="image/*"
+            multiple
+          >
+
+          <small>
+            You can upload up to 5 images.
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="service-minecraft-name">
+            Minecraft username
+          </label>
+
+          <input
+            id="service-minecraft-name"
+            type="text"
+            maxlength="32"
+            placeholder="Your Minecraft name"
+            required
+          >
+        </div>
 
         <button
           class="primary-button full-width"
           type="submit"
+          id="submit-service-request"
         >
-          Submit service request
+          Submit request →
         </button>
 
-        <p id="service-message" class="form-message"></p>
+        <p
+          id="service-request-message"
+          class="form-message"
+        ></p>
+
       </form>
     </div>
   `;
 
-  $("service-form").addEventListener(
+  $("service-request-form").addEventListener(
     "submit",
     submitServiceRequest
   );
@@ -1531,34 +1697,29 @@ function renderServiceForm() {
 
 async function uploadServiceImages(files) {
   const uploadedUrls = [];
-  const selectedFiles = Array.from(files || []);
 
-  if (selectedFiles.length > 5) {
-    throw new Error("You can upload a maximum of 5 images.");
-  }
+  const selectedFiles = Array.from(files || []).slice(0, 5);
 
   for (const file of selectedFiles) {
-    const allowedTypes = [
-      "image/png",
-      "image/jpeg",
-      "image/webp"
-    ];
-
-    if (!allowedTypes.includes(file.type)) {
-      throw new Error("Only PNG, JPG and WEBP images are allowed.");
+    if (!file.type.startsWith("image/")) {
+      throw new Error("Only image files are allowed.");
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      throw new Error("Each image must be smaller than 5 MB.");
+      throw new Error(
+        `${file.name} is too large. Maximum size is 5 MB.`
+      );
     }
 
-    const extension = file.name.split(".").pop() || "png";
+    const extension = file.name.split(".").pop();
 
     const fileName =
-      `${currentSession.user.id}/${crypto.randomUUID()}.${extension}`;
+      `${currentSession.user.id}/` +
+      `${Date.now()}-${crypto.randomUUID()}.${extension}`;
 
-    const { error } = await supabaseClient.storage
-      .from("service-attachments")
+    const { data, error } = await supabaseClient
+      .storage
+      .from("service-images")
       .upload(fileName, file, {
         cacheControl: "3600",
         upsert: false
@@ -1566,11 +1727,14 @@ async function uploadServiceImages(files) {
 
     if (error) throw error;
 
-    const { data } = supabaseClient.storage
-      .from("service-attachments")
-      .getPublicUrl(fileName);
+    const { data: publicData } = supabaseClient
+      .storage
+      .from("service-images")
+      .getPublicUrl(data.path);
 
-    uploadedUrls.push(data.publicUrl);
+    if (publicData?.publicUrl) {
+      uploadedUrls.push(publicData.publicUrl);
+    }
   }
 
   return uploadedUrls;
@@ -1584,95 +1748,87 @@ async function submitServiceRequest(event) {
   event.preventDefault();
 
   if (!currentSession) {
-    showToast("Please log in before submitting a request.", "error");
+    showToast("Please log in first.", "error");
     openLogin();
     return;
   }
 
   const title = $("service-title").value.trim();
-  const minecraftName = $("service-player").value.trim();
+  const type = $("service-type").value;
   const description = $("service-description").value.trim();
-  const budgetValue = $("service-budget").value.trim();
-  const deadline = $("service-deadline").value || null;
+  const budgetInput = $("service-budget").value;
+  const minecraftName =
+    $("service-minecraft-name").value.trim();
 
-  const rawLinks = $("service-links").value
-    .split("\n")
-    .map(value => value.trim())
-    .filter(Boolean);
+  const budget = budgetInput
+    ? Number(budgetInput)
+    : null;
 
-  const files = $("service-images").files;
-
-  if (!title || !minecraftName || !description) {
+  if (!title || !type || !description || !minecraftName) {
     showToast("Please complete all required fields.", "error");
     return;
   }
 
   if (
-    budgetValue !== "" &&
-    (!Number.isFinite(Number(budgetValue)) ||
-      Number(budgetValue) < 0)
+    budget !== null &&
+    (!Number.isFinite(budget) || budget < 0)
   ) {
     showToast("Please enter a valid budget.", "error");
     return;
   }
 
-  const links = [];
+  const links = $("service-links").value
+    .split("\n")
+    .map(link => link.trim())
+    .filter(Boolean)
+    .map(safeExternalUrl)
+    .filter(Boolean);
 
-  for (const link of rawLinks) {
-    const safeLink = safeExternalUrl(link);
+  const files = $("service-images").files;
+  const button = $("submit-service-request");
 
-    if (!safeLink) {
-      showToast(`Invalid reference link: ${link}`, "error");
-      return;
-    }
-
-    links.push(safeLink);
-  }
-
-  const button = event.submitter;
-
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Submitting...";
-  }
+  button.disabled = true;
+  button.textContent = "Uploading...";
 
   try {
     const imageUrls = await uploadServiceImages(files);
 
-    const desiredPrice =
-      budgetValue === "" ? null : Number(budgetValue);
+    button.textContent = "Submitting...";
 
-    const orderData = {
+    const requestData = {
       request_type: "service",
-      items: [{
-        type: "service",
-        name: title,
-        quantity: 1,
-        description
-      }],
-      description,
+      items: [],
+      description: `${title}\n\nType: ${type}\n\n${description}`,
       links,
       image_urls: imageUrls,
-      desired_price: desiredPrice,
-      subtotal: desiredPrice || 0,
+      desired_price: budget,
+      subtotal: budget || 0,
       discount_amount: 0,
-      total: desiredPrice || 0,
+      total: budget || 0,
       status: "pending",
       minecraft_name: minecraftName,
       note: "",
-      user_id: currentSession.user.id,
-      due_date: deadline
+      user_id: currentSession.user.id
     };
 
     const { error } = await supabaseClient
       .from("orders")
-      .insert(orderData);
+      .insert(requestData);
 
     if (error) throw error;
 
-    $("service-form").reset();
+    $("service-request-form").reset();
 
-    showToast("Your service request has been submitted.");
+    showToast("Your service request was submitted.");
+
+    setText(
+      "service-request-message",
+      "Your request has been successfully submitted."
+    );
+
+    if (isAdmin) {
+      await loadRequests();
+    }
 
   } catch (error) {
     console.error("Service request error:", error);
@@ -1682,11 +1838,14 @@ async function submitServiceRequest(event) {
       "error"
     );
 
+    setText(
+      "service-request-message",
+      error.message
+    );
+
   } finally {
-    if (button) {
-      button.disabled = false;
-      button.textContent = "Submit service request";
-    }
+    button.disabled = false;
+    button.textContent = "Submit request →";
   }
 }
 
@@ -1695,67 +1854,91 @@ async function submitServiceRequest(event) {
 ========================================= */
 
 async function loadSession() {
-  const {
-    data: { session },
-    error
-  } = await supabaseClient.auth.getSession();
+  const { data, error } = await supabaseClient.auth.getSession();
 
   if (error) {
-    console.error("Session error:", error);
+    console.error("Session loading error:", error);
     return;
   }
 
-  currentSession = session;
+  currentSession = data.session;
 
-  await updateAuthUI();
+  await updateAuthState();
+}
+
+/* =========================================
+   AUTH STATE
+========================================= */
+
+async function updateAuthState() {
+  currentSession = (
+    await supabaseClient.auth.getSession()
+  ).data.session;
+
+  isAdmin = false;
 
   if (currentSession) {
-    await checkAdminRole();
-  } else {
-    isAdmin = false;
+    const { data: profile, error } = await supabaseClient
+      .from("profiles")
+      .select("role")
+      .eq("id", currentSession.user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Profile loading error:", error);
+    }
+
+    isAdmin = Boolean(
+      profile &&
+      ["admin", "editor"].includes(profile.role)
+    );
+  }
+
+  updateAccountUI();
+
+  if (isAdmin) {
+    await loadCatalogProducts();
   }
 }
 
 /* =========================================
-   AUTH UI
+   ACCOUNT UI
 ========================================= */
 
-async function updateAuthUI() {
-  const loginButton = $("login-button");
+function updateAccountUI() {
   const accountButton = $("account-button");
+  const loginButton = $("login-button");
   const logoutButton = $("logout-button");
-  const userLabel = $("user-label");
   const adminButton = $("admin-button");
 
-  if (currentSession) {
-    const username =
-      currentSession.user.user_metadata?.minecraft_name ||
-      currentSession.user.email ||
-      "Account";
-
-    if (loginButton) loginButton.hidden = true;
-    if (accountButton) accountButton.hidden = false;
-    if (logoutButton) logoutButton.hidden = false;
-
-    if (userLabel) {
-      userLabel.textContent = username;
-    }
-
-  } else {
-    if (loginButton) loginButton.hidden = false;
-    if (accountButton) accountButton.hidden = true;
-    if (logoutButton) logoutButton.hidden = true;
-
-    if (userLabel) {
-      userLabel.textContent = "";
-    }
-
-    if (adminButton) {
-      adminButton.hidden = true;
-    }
-
-    isAdmin = false;
+  if (accountButton) {
+    accountButton.textContent = currentSession
+      ? currentSession.user.email
+      : "Account";
   }
+
+  if (loginButton) {
+    loginButton.style.display =
+      currentSession ? "none" : "";
+  }
+
+  if (logoutButton) {
+    logoutButton.style.display =
+      currentSession ? "" : "none";
+  }
+
+  if (adminButton) {
+    adminButton.style.display =
+      isAdmin ? "" : "none";
+  }
+
+  const adminNavigation = document.querySelectorAll(
+    "[data-admin-only]"
+  );
+
+  adminNavigation.forEach(element => {
+    element.style.display = isAdmin ? "" : "none";
+  });
 }
 
 /* =========================================
@@ -1770,19 +1953,38 @@ function openLogin() {
     return;
   }
 
-  modal.classList.add("show");
+  modal.classList.add("active");
+  document.body.style.overflow = "hidden";
 }
 
 function closeLogin() {
   const modal = $("login-modal");
 
   if (modal) {
-    modal.classList.remove("show");
+    modal.classList.remove("active");
   }
+
+  document.body.style.overflow = "";
 }
 
 if ($("login-button")) {
   $("login-button").addEventListener("click", openLogin);
+}
+
+if ($("account-button")) {
+  $("account-button").addEventListener("click", () => {
+    if (currentSession) {
+      if (isAdmin) {
+        openAdmin();
+      } else {
+        showToast(
+          `Logged in as ${currentSession.user.email}`
+        );
+      }
+    } else {
+      openLogin();
+    }
+  });
 }
 
 if ($("login-close")) {
@@ -1796,27 +1998,26 @@ if ($("login-modal")) {
     }
   });
 }
+
 /* =========================================
-   SIGN IN
+   LOGIN FORM
 ========================================= */
 
-async function signIn(event) {
+async function loginUser(event) {
   event.preventDefault();
 
-  const email = $("login-email")?.value.trim() || "";
-  const password = $("login-password")?.value || "";
-  const message = $("login-message");
-  const button = $("login-form")?.querySelector(
-    'button[type="submit"]'
-  );
+  const email = $("login-email").value.trim();
+  const password = $("login-password").value;
 
-  if (message) {
-    message.textContent = "Signing in...";
+  const button = $("login-submit");
+
+  if (!email || !password) {
+    showToast("Enter your email and password.", "error");
+    return;
   }
 
-  if (button) {
-    button.disabled = true;
-  }
+  button.disabled = true;
+  button.textContent = "Signing in...";
 
   try {
     const { data, error } = await supabaseClient.auth
@@ -1829,169 +2030,215 @@ async function signIn(event) {
 
     currentSession = data.session;
 
-    await updateAuthUI();
-    await checkAdminRole();
+    await updateAuthState();
 
     closeLogin();
 
     showToast("Successfully signed in.");
 
-    if ($("login-form")) {
-      $("login-form").reset();
+    if (isAdmin) {
+      await loadRequests();
+      await loadCatalogProducts();
     }
 
   } catch (error) {
-    console.error("Sign in error:", error);
+    console.error("Login error:", error);
 
-    if (message) {
-      message.textContent = error.message;
-    }
+    showToast(
+      `Login failed: ${error.message}`,
+      "error"
+    );
 
   } finally {
-    if (button) {
-      button.disabled = false;
-    }
+    button.disabled = false;
+    button.textContent = "Sign in";
   }
 }
 
 if ($("login-form")) {
-  $("login-form").addEventListener("submit", signIn);
+  $("login-form").addEventListener("submit", loginUser);
 }
 
 /* =========================================
-   SIGN OUT
+   REGISTER
 ========================================= */
 
-async function signOut() {
-  const { error } = await supabaseClient.auth.signOut();
+async function registerUser(event) {
+  event.preventDefault();
 
-  if (error) {
-    showToast(error.message, "error");
+  const email = $("register-email")?.value.trim();
+  const password = $("register-password")?.value;
+
+  if (!email || !password) {
+    showToast("Enter email and password.", "error");
     return;
   }
 
-  currentSession = null;
-  isAdmin = false;
-  requests = [];
-  catalogCache = [];
+  if (password.length < 6) {
+    showToast(
+      "Password must contain at least 6 characters.",
+      "error"
+    );
+    return;
+  }
 
-  await updateAuthUI();
+  try {
+    const { data, error } = await supabaseClient.auth
+      .signUp({
+        email,
+        password
+      });
 
-  closeAdmin();
-  showCategory("All");
+    if (error) throw error;
 
-  showToast("You have been signed out.");
+    if (data.session) {
+      currentSession = data.session;
+      await updateAuthState();
+    }
+
+    showToast(
+      "Registration successful. Check your email if confirmation is required."
+    );
+
+    closeLogin();
+
+  } catch (error) {
+    console.error("Registration error:", error);
+
+    showToast(
+      `Registration failed: ${error.message}`,
+      "error"
+    );
+  }
+}
+
+if ($("register-form")) {
+  $("register-form").addEventListener(
+    "submit",
+    registerUser
+  );
+}
+
+/* =========================================
+   PASSWORD RESET
+========================================= */
+
+async function resetPassword() {
+  const email = $("login-email")?.value.trim();
+
+  if (!email) {
+    showToast(
+      "Please enter your email address first.",
+      "error"
+    );
+    return;
+  }
+
+  try {
+    const { error } = await supabaseClient.auth
+      .resetPasswordForEmail(email, {
+        redirectTo: window.location.origin
+      });
+
+    if (error) throw error;
+
+    showToast("Password reset email sent.");
+
+  } catch (error) {
+    console.error("Password reset error:", error);
+
+    showToast(
+      `Could not send reset email: ${error.message}`,
+      "error"
+    );
+  }
+}
+
+if ($("forgot-password")) {
+  $("forgot-password").addEventListener(
+    "click",
+    resetPassword
+  );
+}
+
+/* =========================================
+   LOGOUT
+========================================= */
+
+async function logoutUser() {
+  try {
+    const { error } = await supabaseClient.auth.signOut();
+
+    if (error) throw error;
+
+    currentSession = null;
+    isAdmin = false;
+
+    updateAccountUI();
+
+    closeCart();
+
+    cart = {};
+    saveCart();
+    renderCart();
+
+    showToast("You have been signed out.");
+
+  } catch (error) {
+    console.error("Logout error:", error);
+
+    showToast(
+      `Logout failed: ${error.message}`,
+      "error"
+    );
+  }
 }
 
 if ($("logout-button")) {
-  $("logout-button").addEventListener("click", signOut);
+  $("logout-button").addEventListener(
+    "click",
+    logoutUser
+  );
 }
 
 /* =========================================
-   ACCOUNT BUTTON
-========================================= */
-
-if ($("account-button")) {
-  $("account-button").addEventListener("click", () => {
-    if (!currentSession) return;
-
-    const username =
-      currentSession.user.user_metadata?.minecraft_name ||
-      currentSession.user.email;
-
-    showToast(`Signed in as ${username}.`);
-  });
-}
-
-/* =========================================
-   ADMIN ROLE CHECK
-========================================= */
-
-async function checkAdminRole() {
-  if (!currentSession) {
-    isAdmin = false;
-
-    if ($("admin-button")) {
-      $("admin-button").hidden = true;
-    }
-
-    return;
-  }
-
-  const { data, error } = await supabaseClient
-    .from("profiles")
-    .select("role")
-    .eq("id", currentSession.user.id)
-    .maybeSingle();
-
-  if (error) {
-    console.error("Role check failed:", error);
-    isAdmin = false;
-
-    if ($("admin-button")) {
-      $("admin-button").hidden = true;
-    }
-
-    return;
-  }
-
-  isAdmin =
-    data?.role === "admin" ||
-    data?.role === "editor";
-
-  if ($("admin-button")) {
-    $("admin-button").hidden = !isAdmin;
-  }
-
-  if (isAdmin) {
-    await loadRequests();
-    await loadCatalogProducts();
-  }
-}
-
-/* =========================================
-   AUTH STATE CHANGES
+   AUTH STATE LISTENER
 ========================================= */
 
 supabaseClient.auth.onAuthStateChange(
-  (_event, session) => {
+  async (event, session) => {
     currentSession = session;
 
-    window.setTimeout(async () => {
-      await updateAuthUI();
+    if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+      await updateAuthState();
+    }
 
-      if (session) {
-        await checkAdminRole();
-      } else {
-        isAdmin = false;
-        requests = [];
-        catalogCache = [];
-
-        if ($("admin-button")) {
-          $("admin-button").hidden = true;
-        }
-
-        if ($("admin-section")) {
-          $("admin-section").hidden = true;
-          $("admin-section").style.display = "none";
-        }
-      }
-    }, 0);
+    if (event === "SIGNED_OUT") {
+      currentSession = null;
+      isAdmin = false;
+      updateAccountUI();
+    }
   }
 );
-
 /* =========================================
    ADMIN DASHBOARD
 ========================================= */
 
 function openAdmin() {
   if (!isAdmin) {
-    showToast(
-      "You do not have permission to access the admin area.",
-      "error"
-    );
+    showToast("You do not have permission to access the admin panel.", "error");
     return;
   }
+
+  const section = $("admin-section");
+
+  if (!section) {
+    showToast("Admin panel is unavailable.", "error");
+    return;
+  }
+
+  section.hidden = false;
+  section.style.display = "";
 
   if ($("offers")) {
     $("offers").style.display = "none";
@@ -2001,63 +2248,135 @@ function openAdmin() {
     $("shop").style.display = "none";
   }
 
-  if ($("admin-section")) {
-    $("admin-section").hidden = false;
-    $("admin-section").style.display = "";
-
-    $("admin-section").scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
-  }
-
-  document.querySelectorAll(".nav-link").forEach(link => {
-    link.classList.remove("active");
+  section.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
   });
 
-  loadRequests();
-  loadCatalogProducts();
+  loadAdminDashboard();
 }
 
-function closeAdmin() {
-  if ($("admin-section")) {
-    $("admin-section").hidden = true;
-    $("admin-section").style.display = "none";
-  }
+async function loadAdminDashboard() {
+  if (!isAdmin) return;
 
-  showCategory("All");
+  await Promise.all([
+    loadOrders(),
+    loadRequests(),
+    loadCatalogProducts()
+  ]);
+
+  renderAdminStats();
 }
 
 if ($("admin-button")) {
   $("admin-button").addEventListener("click", openAdmin);
 }
 
-if ($("admin-close")) {
-  $("admin-close").addEventListener("click", closeAdmin);
+/* =========================================
+   ADMIN NAVIGATION
+========================================= */
+
+function showAdminTab(tab) {
+  if (!isAdmin) return;
+
+  document.querySelectorAll("[data-admin-panel]").forEach(panel => {
+    panel.style.display =
+      panel.dataset.adminPanel === tab ? "" : "none";
+  });
+
+  document.querySelectorAll("[data-admin-tab]").forEach(button => {
+    button.classList.toggle(
+      "active",
+      button.dataset.adminTab === tab
+    );
+  });
+
+  if (tab === "orders") {
+    loadOrders();
+  }
+
+  if (tab === "requests") {
+    loadRequests();
+  }
+
+  if (tab === "products") {
+    loadCatalogProducts();
+  }
+}
+
+document.querySelectorAll("[data-admin-tab]").forEach(button => {
+  button.addEventListener("click", () => {
+    showAdminTab(button.dataset.adminTab);
+  });
+});
+
+/* =========================================
+   ADMIN STATISTICS
+========================================= */
+
+async function renderAdminStats() {
+  if (!isAdmin) return;
+
+  const { data: orderData, error } = await supabaseClient
+    .from("orders")
+    .select("id,status,total,request_type");
+
+  if (error) {
+    console.error("Admin statistics error:", error);
+    return;
+  }
+
+  const allOrders = orderData || [];
+
+  const pending = allOrders.filter(
+    order => order.status === "pending"
+  );
+
+  const completed = allOrders.filter(
+    order => order.status === "completed"
+  );
+
+  const revenue = allOrders
+    .filter(order => order.status === "completed")
+    .reduce(
+      (sum, order) => sum + Number(order.total || 0),
+      0
+    );
+
+  setText("admin-stat-orders", allOrders.length);
+  setText("admin-stat-pending", pending.length);
+  setText("admin-stat-completed", completed.length);
+  setText("admin-stat-revenue", money(revenue));
 }
 
 /* =========================================
-   LOAD ORDERS / REQUESTS
+   LOAD ORDERS
 ========================================= */
 
-async function loadRequests() {
+let orders = [];
+
+async function loadOrders() {
   if (!isAdmin) return;
 
-  const container = $("admin-requests");
+  const container = $("admin-orders");
 
   if (container) {
     container.innerHTML = `
-      <div class="loading-state">Loading orders...</div>
+      <div class="loading-state">
+        Loading orders...
+      </div>
     `;
   }
 
   const { data, error } = await supabaseClient
     .from("orders")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", {
+      ascending: false
+    });
 
   if (error) {
-    console.error("Could not load orders:", error);
+    console.error("Order loading error:", error);
 
     if (container) {
       container.innerHTML = `
@@ -2070,46 +2389,357 @@ async function loadRequests() {
     return;
   }
 
-  requests = data || [];
+  orders = data || [];
 
-  renderRequests();
+  renderOrders();
   renderAdminStats();
 }
 
 /* =========================================
-   REFRESH ORDERS
+   ORDER STATUS
 ========================================= */
 
-if ($("refresh-requests")) {
-  $("refresh-requests").addEventListener("click", loadRequests);
+const orderStatuses = [
+  "pending",
+  "processing",
+  "completed",
+  "cancelled"
+];
+
+function getStatusLabel(status) {
+  const labels = {
+    pending: "Pending",
+    processing: "Processing",
+    completed: "Completed",
+    cancelled: "Cancelled"
+  };
+
+  return labels[status] || status;
+}
+
+function getStatusClass(status) {
+  const allowed = [
+    "pending",
+    "processing",
+    "completed",
+    "cancelled"
+  ];
+
+  return allowed.includes(status)
+    ? status
+    : "pending";
+}
+
+async function updateOrderStatus(orderId, status) {
+  if (!isAdmin) return;
+
+  if (!orderStatuses.includes(status)) {
+    showToast("Invalid order status.", "error");
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("orders")
+    .update({
+      status
+    })
+    .eq("id", orderId);
+
+  if (error) {
+    console.error("Order status error:", error);
+
+    showToast(
+      `Could not update status: ${error.message}`,
+      "error"
+    );
+
+    return;
+  }
+
+  showToast("Order status updated.");
+
+  await loadOrders();
 }
 
 /* =========================================
-   ADMIN STATISTICS
+   ORDER ITEMS DISPLAY
 ========================================= */
 
-function renderAdminStats() {
-  const totalOrders = requests.length;
+function renderOrderItems(items) {
+  if (!Array.isArray(items) || !items.length) {
+    return `<span class="muted">No products</span>`;
+  }
 
-  const pendingOrders = requests.filter(
-    request => request.status === "pending"
-  ).length;
+  return `
+    <div class="order-item-list">
+      ${items.map(item => `
+        <div class="order-item-row">
 
-  const completedOrders = requests.filter(
-    request => request.status === "completed"
-  ).length;
+          <span>
+            ${escapeHTML(item.name || "Product")}
+            ${item.variant_color_name ? `
+              <span class="order-variant">
+                (${escapeHTML(item.variant_color_name)})
+              </span>
+            ` : ""}
+          </span>
 
-  const totalRevenue = requests
-    .filter(request => request.status === "completed")
-    .reduce(
-      (sum, request) => sum + Number(request.total || 0),
-      0
-    );
+          <strong>
+            × ${Number(item.quantity || 1)}
+          </strong>
 
-  setText("admin-total-orders", totalOrders);
-  setText("admin-pending-orders", pendingOrders);
-  setText("admin-completed-orders", completedOrders);
-  setText("admin-revenue", money(totalRevenue));
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+/* =========================================
+   RENDER ORDERS
+========================================= */
+
+function renderOrders() {
+  const container = $("admin-orders");
+
+  if (!container) return;
+
+  if (!orders.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <p>No orders found.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = orders.map(order => {
+    const items = Array.isArray(order.items)
+      ? order.items
+      : [];
+
+    const requestType =
+      order.request_type === "service"
+        ? "Service request"
+        : "Product order";
+
+    return `
+      <article class="admin-order-card">
+
+        <div class="admin-order-header">
+
+          <div>
+            <span class="order-number">
+              #${escapeHTML(String(order.id).slice(0, 8))}
+            </span>
+
+            <span class="order-date">
+              ${formatDate(order.created_at)}
+            </span>
+          </div>
+
+          <span class="status-badge ${getStatusClass(order.status)}">
+            ${escapeHTML(getStatusLabel(order.status))}
+          </span>
+
+        </div>
+
+        <div class="admin-order-body">
+
+          <div class="order-meta">
+            <span>Type</span>
+            <strong>${requestType}</strong>
+          </div>
+
+          <div class="order-meta">
+            <span>Minecraft username</span>
+            <strong>
+              ${escapeHTML(order.minecraft_name || "Not provided")}
+            </strong>
+          </div>
+
+          <div class="order-meta">
+            <span>Customer ID</span>
+            <strong>
+              ${escapeHTML(order.user_id || "Unknown")}
+            </strong>
+          </div>
+
+          <div class="order-meta">
+            <span>Total</span>
+            <strong>${money(order.total)}</strong>
+          </div>
+
+          ${order.delivery_district ? `
+            <div class="order-meta">
+              <span>District</span>
+              <strong>
+                ${escapeHTML(order.delivery_district)}
+              </strong>
+            </div>
+          ` : ""}
+
+          ${order.delivery_address ? `
+            <div class="order-meta">
+              <span>Address</span>
+              <strong>
+                ${escapeHTML(order.delivery_address)}
+              </strong>
+            </div>
+          ` : ""}
+
+          ${order.note ? `
+            <div class="order-note">
+              <strong>Customer note</strong>
+              <p>${escapeHTML(order.note)}</p>
+            </div>
+          ` : ""}
+
+          ${order.request_type === "service" ? `
+            <div class="order-description">
+              <strong>Service description</strong>
+              <p>${escapeHTML(order.description || "")}</p>
+            </div>
+          ` : renderOrderItems(items)}
+
+          ${Array.isArray(order.links) && order.links.length ? `
+            <div class="order-links">
+              <strong>Reference links</strong>
+
+              ${order.links.map(link => {
+                const safeUrl = safeExternalUrl(link);
+
+                return safeUrl ? `
+                  <a
+                    href="${escapeHTML(safeUrl)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open reference
+                  </a>
+                ` : "";
+              }).join("")}
+            </div>
+          ` : ""}
+
+          ${Array.isArray(order.image_urls) && order.image_urls.length ? `
+            <div class="order-images">
+              <strong>Reference images</strong>
+
+              <div class="order-image-grid">
+                ${order.image_urls.map(url => {
+                  const safeUrl = safeExternalUrl(url);
+
+                  return safeUrl ? `
+                    <a
+                      href="${escapeHTML(safeUrl)}"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <img
+                        src="${escapeHTML(safeUrl)}"
+                        alt="Customer reference"
+                        loading="lazy"
+                      >
+                    </a>
+                  ` : "";
+                }).join("")}
+              </div>
+            </div>
+          ` : ""}
+
+        </div>
+
+        <div class="admin-order-footer">
+
+          <label>
+            Update status
+
+            <select
+              data-order-status="${escapeHTML(order.id)}"
+            >
+              ${orderStatuses.map(status => `
+                <option
+                  value="${status}"
+                  ${order.status === status ? "selected" : ""}
+                >
+                  ${getStatusLabel(status)}
+                </option>
+              `).join("")}
+            </select>
+          </label>
+
+          <button
+            class="secondary-button"
+            data-order-update="${escapeHTML(order.id)}"
+            type="button"
+          >
+            Save status
+          </button>
+
+        </div>
+
+      </article>
+    `;
+  }).join("");
+
+  container.querySelectorAll("[data-order-update]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const id = button.dataset.orderUpdate;
+
+      const select = container.querySelector(
+        `[data-order-status="${CSS.escape(id)}"]`
+      );
+
+      if (select) {
+        await updateOrderStatus(id, select.value);
+      }
+    });
+  });
+}
+
+/* =========================================
+   SERVICE REQUESTS
+========================================= */
+
+async function loadRequests() {
+  if (!isAdmin) return;
+
+  const container = $("admin-requests");
+
+  if (container) {
+    container.innerHTML = `
+      <div class="loading-state">
+        Loading requests...
+      </div>
+    `;
+  }
+
+  const { data, error } = await supabaseClient
+    .from("orders")
+    .select("*")
+    .eq("request_type", "service")
+    .order("created_at", {
+      ascending: false
+    });
+
+  if (error) {
+    console.error("Request loading error:", error);
+
+    if (container) {
+      container.innerHTML = `
+        <p class="error-message">
+          Could not load requests:
+          ${escapeHTML(error.message)}
+        </p>
+      `;
+    }
+
+    return;
+  }
+
+  requests = data || [];
+
+  renderRequests();
 }
 
 /* =========================================
@@ -2117,18 +2747,6 @@ function renderAdminStats() {
 ========================================= */
 
 function filterRequests(filter) {
-  const allowedFilters = [
-    "all",
-    "pending",
-    "processing",
-    "completed",
-    "cancelled"
-  ];
-
-  if (!allowedFilters.includes(filter)) {
-    filter = "all";
-  }
-
   currentRequestFilter = filter;
 
   document.querySelectorAll("[data-request-filter]").forEach(button => {
@@ -2156,145 +2774,73 @@ function renderRequests() {
 
   if (!container) return;
 
-  let filteredRequests = [...requests];
+  let filtered = [...requests];
 
   if (currentRequestFilter !== "all") {
-    filteredRequests = filteredRequests.filter(
-      request => request.status === currentRequestFilter
+    filtered = filtered.filter(request =>
+      request.status === currentRequestFilter
     );
   }
 
-  if (!filteredRequests.length) {
+  if (!filtered.length) {
     container.innerHTML = `
       <div class="empty-state">
-        <h3>No orders found</h3>
-        <p>There are currently no orders in this category.</p>
+        <p>No service requests found.</p>
       </div>
     `;
-
     return;
   }
 
-  container.innerHTML = filteredRequests.map(request => {
-    const items = Array.isArray(request.items)
-      ? request.items
-      : [];
+  container.innerHTML = filtered.map(request => `
+    <article class="admin-order-card">
 
-    const itemList = items.map(item => `
-      <div class="request-item">
-        <span>${escapeHTML(item.name || "Unknown item")}</span>
-                <span>× ${Number(item.quantity || 1)}</span>
-      </div>
-    `).join("");
+      <div class="admin-order-header">
 
-    const allowedStatuses = [
-      "pending",
-      "processing",
-      "completed",
-      "cancelled"
-    ];
+        <div>
+          <span class="order-number">
+            #${escapeHTML(String(request.id).slice(0, 8))}
+          </span>
 
-    const status = allowedStatuses.includes(request.status)
-      ? request.status
-      : "pending";
-
-    const links = Array.isArray(request.links)
-      ? request.links
-      : [];
-
-    const images = Array.isArray(request.image_urls)
-      ? request.image_urls
-      : [];
-
-    return `
-      <article class="admin-request-card">
-        <div class="request-header">
-          <div>
-            <span class="request-number">
-              ORDER #${escapeHTML(String(request.id).slice(0, 8))}
-            </span>
-
-            <h3>
-              ${escapeHTML(request.minecraft_name || "Unknown player")}
-            </h3>
-          </div>
-
-          <span class="status-badge status-${status}">
-            ${status.toUpperCase()}
+          <span class="order-date">
+            ${formatDate(request.created_at)}
           </span>
         </div>
 
-        <div class="request-meta">
-          <span>${formatDate(request.created_at)}</span>
-          <span>${money(request.total || 0)}</span>
-          <span>${escapeHTML(request.request_type || "product")}</span>
+        <span class="status-badge ${getStatusClass(request.status)}">
+          ${escapeHTML(getStatusLabel(request.status))}
+        </span>
+
+      </div>
+
+      <div class="admin-order-body">
+
+        <div class="order-meta">
+          <span>Minecraft username</span>
+          <strong>
+            ${escapeHTML(request.minecraft_name || "Not provided")}
+          </strong>
         </div>
 
-        <div class="request-items">
-          ${itemList || "<p>No item details available.</p>"}
+        <div class="order-meta">
+          <span>Desired budget</span>
+          <strong>
+            ${request.desired_price
+              ? money(request.desired_price)
+              : "Not specified"}
+          </strong>
         </div>
 
-        ${request.description ? `
-          <div class="request-description">
-            <strong>Description</strong>
-            <p>${escapeHTML(request.description)}</p>
-          </div>
-        ` : ""}
+        <div class="order-description">
+          <strong>Description</strong>
+          <p>${escapeHTML(request.description || "")}</p>
+        </div>
 
-        ${request.note ? `
-          <div class="request-description">
-            <strong>Customer note</strong>
-            <p>${escapeHTML(request.note)}</p>
-          </div>
-        ` : ""}
-
-        ${request.desired_price !== null &&
-          request.desired_price !== undefined ? `
-          <div class="request-description">
-            <strong>Desired budget</strong>
-            <p>${money(request.desired_price)}</p>
-          </div>
-        ` : ""}
-
-        ${request.due_date ? `
-          <div class="request-description">
-            <strong>Desired deadline</strong>
-            <p>${formatDate(request.due_date)}</p>
-          </div>
-        ` : ""}
-
-        ${request.delivery_district || request.delivery_address ? `
-          <div class="request-description">
-            <strong>Delivery</strong>
-            <p>
-              ${escapeHTML(request.delivery_district || "")}
-              ${escapeHTML(request.delivery_address || "")}
-            </p>
-          </div>
-        ` : ""}
-
-        ${links.length ? `
-          <div class="request-links">
+        ${Array.isArray(request.links) && request.links.length ? `
+          <div class="order-links">
             <strong>Reference links</strong>
 
-            ${links.map(link => {
-              const safeLink = safeExternalUrl(link);
-
-              return safeLink ? `
-                <a
-                  href="${escapeHTML(safeLink)}"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >Open reference</a>
-              ` : "";
-            }).join("")}
-          </div>
-        ` : ""}
-
-        ${images.length ? `
-          <div class="request-images">
-            ${images.map(url => {
-              const safeUrl = safeExternalUrl(url);
+            ${request.links.map(link => {
+              const safeUrl = safeExternalUrl(link);
 
               return safeUrl ? `
                 <a
@@ -2302,136 +2848,118 @@ function renderRequests() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <img
-                    src="${escapeHTML(safeUrl)}"
-                    alt="Reference image"
-                    loading="lazy"
-                  >
+                  Open reference
                 </a>
               ` : "";
             }).join("")}
           </div>
         ` : ""}
 
-        <div class="request-actions">
-          <select
-            data-status-select="${escapeHTML(request.id)}"
-            aria-label="Change order status"
-          >
-            <option value="pending" ${status === "pending" ? "selected" : ""}>
-              Pending
+        ${Array.isArray(request.image_urls) && request.image_urls.length ? `
+          <div class="order-images">
+            <strong>Reference images</strong>
+
+            <div class="order-image-grid">
+              ${request.image_urls.map(url => {
+                const safeUrl = safeExternalUrl(url);
+
+                return safeUrl ? `
+                  <a
+                    href="${escapeHTML(safeUrl)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img
+                      src="${escapeHTML(safeUrl)}"
+                      alt="Reference image"
+                      loading="lazy"
+                    >
+                  </a>
+                ` : "";
+              }).join("")}
+            </div>
+          </div>
+        ` : ""}
+
+      </div>
+
+      <div class="admin-order-footer">
+
+        <select
+          data-request-status="${escapeHTML(request.id)}"
+        >
+          ${orderStatuses.map(status => `
+            <option
+              value="${status}"
+              ${request.status === status ? "selected" : ""}
+            >
+              ${getStatusLabel(status)}
             </option>
+          `).join("")}
+        </select>
 
-            <option value="processing" ${status === "processing" ? "selected" : ""}>
-              Processing
-            </option>
+        <button
+          class="secondary-button"
+          data-request-update="${escapeHTML(request.id)}"
+          type="button"
+        >
+          Save status
+        </button>
 
-            <option value="completed" ${status === "completed" ? "selected" : ""}>
-              Completed
-            </option>
+      </div>
 
-            <option value="cancelled" ${status === "cancelled" ? "selected" : ""}>
-              Cancelled
-            </option>
-          </select>
+    </article>
+  `).join("");
 
-          <button
-            class="secondary-button"
-            data-update-status="${escapeHTML(request.id)}"
-            type="button"
-          >
-            Update status
-          </button>
-        </div>
-      </article>
-    `;
-  }).join("");
-
-  container.querySelectorAll("[data-update-status]").forEach(button => {
+  container.querySelectorAll("[data-request-update]").forEach(button => {
     button.addEventListener("click", async () => {
-      const id = button.dataset.updateStatus;
+      const id = button.dataset.requestUpdate;
 
       const select = container.querySelector(
-        `[data-status-select="${CSS.escape(id)}"]`
+        `[data-request-status="${CSS.escape(id)}"]`
       );
 
-      if (!select) return;
-
-      button.disabled = true;
-      button.textContent = "Updating...";
-
-      await updateRequestStatus(id, select.value);
+      if (select) {
+        await updateOrderStatus(id, select.value);
+        await loadRequests();
+      }
     });
   });
 }
 
 /* =========================================
-   UPDATE REQUEST STATUS
-========================================= */
-
-async function updateRequestStatus(id, status) {
-  const allowedStatuses = [
-    "pending",
-    "processing",
-    "completed",
-    "cancelled"
-  ];
-
-  if (!isAdmin) {
-    showToast("Permission denied.", "error");
-    return;
-  }
-
-  if (!allowedStatuses.includes(status)) {
-    showToast("Invalid status.", "error");
-    return;
-  }
-
-  const { error } = await supabaseClient
-    .from("orders")
-    .update({ status })
-    .eq("id", id);
-
-  if (error) {
-    console.error("Status update failed:", error);
-    showToast(error.message, "error");
-    return;
-  }
-
-  showToast("Order status updated.");
-
-  await loadRequests();
-}
-
-/* =========================================
-   LOAD COMPLETE PRODUCT CATALOG
+   ADMIN PRODUCT CATALOG
 ========================================= */
 
 async function loadCatalogProducts() {
   if (!isAdmin) return;
 
-  const container = $("catalog-products");
+  const container = $("admin-products");
 
-  if (!container) return;
-
-  container.innerHTML = `
-    <div class="loading-state">Loading catalogue...</div>
-  `;
+  if (container) {
+    container.innerHTML = `
+      <div class="loading-state">
+        Loading products...
+      </div>
+    `;
+  }
 
   const { data, error } = await supabaseClient
     .from("products")
     .select("*")
-    .order("category")
     .order("name");
 
   if (error) {
-    console.error("Catalogue error:", error);
+    console.error("Catalog loading error:", error);
 
-    container.innerHTML = `
-      <p class="error-message">
-        Could not load catalogue: ${escapeHTML(error.message)}
-      </p>
-    `;
+    if (container) {
+      container.innerHTML = `
+        <p class="error-message">
+          Could not load catalog:
+          ${escapeHTML(error.message)}
+        </p>
+      `;
+    }
 
     return;
   }
@@ -2442,71 +2970,70 @@ async function loadCatalogProducts() {
 }
 
 /* =========================================
-   RENDER CATALOGUE
+   RENDER ADMIN CATALOG
 ========================================= */
 
-function renderCatalogProducts(catalog) {
-  const container = $("catalog-products");
+function renderCatalogProducts(list = catalogCache) {
+  const container = $("admin-products");
 
   if (!container) return;
 
-  const searchValue = (
-    $("catalog-search")?.value || ""
-  ).toLowerCase();
-
-  const filtered = catalog.filter(product =>
-    String(product.name || "")
-      .toLowerCase()
-      .includes(searchValue)
-  );
-
-  if (!filtered.length) {
+  if (!list.length) {
     container.innerHTML = `
       <div class="empty-state">
-        <h3>No products found</h3>
-        <p>Try another search or import products.</p>
+        <p>No products in catalog.</p>
       </div>
     `;
-
     return;
   }
 
   container.innerHTML = `
+    <div class="catalog-toolbar">
+      <input
+        id="catalog-search"
+        type="search"
+        placeholder="Search products..."
+      >
+
+      <button
+        class="primary-button"
+        id="create-product-button"
+        type="button"
+      >
+        + Add product
+      </button>
+    </div>
+
     <div class="catalog-table-wrapper">
       <table class="catalog-table">
+
         <thead>
           <tr>
             <th>Product</th>
             <th>Category</th>
             <th>Price</th>
-            <th>Stack size</th>
             <th>Status</th>
-            <th>Action</th>
+            <th>Actions</th>
           </tr>
         </thead>
 
         <tbody>
-          ${filtered.map(product => `
+          ${list.map(product => `
             <tr>
-              <td>
-                <strong>${escapeHTML(product.name)}</strong>
-              </td>
-
-              <td>${escapeHTML(product.category || "Items")}</td>
 
               <td>
-                ${Number(product.price || 0) > 0
-                  ? money(product.price)
-                  : "Not set"}
+                <div class="catalog-product-name">
+                  ${escapeHTML(product.name)}
+                </div>
               </td>
 
-              <td>${Number(product.stack_size || 64)}</td>
+              <td>${escapeHTML(product.category)}</td>
+
+              <td>${money(product.price)}</td>
 
               <td>
                 <span class="status-badge ${
-                  product.is_active
-                    ? "status-completed"
-                    : "status-pending"
+                  product.is_active ? "completed" : "cancelled"
                 }">
                   ${product.is_active ? "Active" : "Inactive"}
                 </span>
@@ -2514,6 +3041,7 @@ function renderCatalogProducts(catalog) {
 
               <td>
                 <div class="catalog-actions">
+
                   <button
                     class="secondary-button"
                     data-catalog-edit="${escapeHTML(product.id)}"
@@ -2523,25 +3051,49 @@ function renderCatalogProducts(catalog) {
                   </button>
 
                   <button
-                    class="product-delete-button"
+                    class="danger-button"
                     data-catalog-delete="${escapeHTML(product.id)}"
                     type="button"
                   >
                     Delete
                   </button>
+
                 </div>
               </td>
+
             </tr>
           `).join("")}
         </tbody>
+
       </table>
     </div>
   `;
 
+  $("catalog-search").addEventListener("input", event => {
+    const query = event.target.value.toLowerCase();
+
+    const filtered = catalogCache.filter(product =>
+      String(product.name || "").toLowerCase().includes(query) ||
+      String(product.category || "").toLowerCase().includes(query)
+    );
+
+    renderCatalogProducts(filtered);
+
+    const searchInput = $("catalog-search");
+
+    if (searchInput) {
+      searchInput.value = query;
+    }
+  });
+
+  $("create-product-button").addEventListener("click", () => {
+    openCreateProductEditor();
+  });
+
   container.querySelectorAll("[data-catalog-edit]").forEach(button => {
     button.addEventListener("click", () => {
-      const product = catalogCache.find(
-        item => String(item.id) === button.dataset.catalogEdit
+      const product = catalogCache.find(item =>
+        String(item.id) === String(button.dataset.catalogEdit)
       );
 
       if (product) {
@@ -2556,308 +3108,563 @@ function renderCatalogProducts(catalog) {
     });
   });
 }
-
 /* =========================================
-   CATALOGUE SEARCH
+   CREATE PRODUCT EDITOR
 ========================================= */
 
-if ($("catalog-search")) {
-  $("catalog-search").addEventListener("input", () => {
-    renderCatalogProducts(catalogCache);
-  });
-}
-
-/* =========================================
-   CREATE NEW PRODUCT
-========================================= */
-
-async function createCatalogProduct() {
+function openCreateProductEditor() {
   if (!isAdmin) return;
 
-  const name = prompt("Enter the Minecraft item name:");
+  const existingModal = $("product-create-modal");
 
-  if (!name || !name.trim()) return;
-
-  const validCategories = [
-    "Blocks",
-    "Items",
-    "Redstone",
-    "Armor & Weapons",
-    "Enchantments"
-  ];
-
-  const selectedCategory = prompt(
-    "Category: Blocks, Items, Redstone, Armor & Weapons, Enchantments",
-    "Items"
-  );
-
-  if (!validCategories.includes(selectedCategory)) {
-    showToast("Invalid category.", "error");
-    return;
+  if (existingModal) {
+    existingModal.remove();
   }
 
-  const { error } = await supabaseClient
-    .from("products")
-    .insert({
-      name: name.trim(),
-      category: selectedCategory,
-      description: "",
-      price: 0,
-      stack_size: 64,
-      discount_percent: 0,
-      is_active: false
-    });
+  const modal = document.createElement("div");
 
-  if (error) {
-    showToast(error.message, "error");
-    return;
-  }
+  modal.id = "product-create-modal";
+  modal.className = "modal-overlay";
 
-  showToast("Product added to catalogue.");
+  modal.innerHTML = `
+    <div class="modal-content">
 
-  await loadCatalogProducts();
+      <div class="modal-header">
+        <h2>Create product</h2>
+
+        <button
+          type="button"
+          class="modal-close"
+          id="close-create-product"
+        >
+          ×
+        </button>
+      </div>
+
+      <form id="create-product-form">
+
+        <label>
+          Product name
+
+          <input
+            type="text"
+            id="new-product-name"
+            required
+            maxlength="100"
+            placeholder="e.g. Diamond"
+          >
+        </label>
+
+        <label>
+          Category
+
+          <select id="new-product-category" required>
+            <option value="Blocks">Blocks</option>
+            <option value="Items">Items</option>
+            <option value="Redstone">Redstone</option>
+            <option value="Armor & Weapons">Armor & Weapons</option>
+            <option value="Enchantments">Enchantments</option>
+            <option value="Services">Services</option>
+          </select>
+        </label>
+
+        <label>
+          Price (KB$)
+
+          <input
+            type="number"
+            id="new-product-price"
+            min="0"
+            step="0.01"
+            required
+            placeholder="10"
+          >
+        </label>
+
+        <label>
+          Stack size
+
+          <input
+            type="number"
+            id="new-product-stack"
+            min="1"
+            max="999999"
+            value="64"
+            required
+          >
+        </label>
+
+        <label>
+          Discount (%)
+
+          <input
+            type="number"
+            id="new-product-discount"
+            min="0"
+            max="99"
+            step="0.1"
+            value="0"
+          >
+        </label>
+
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            id="new-product-active"
+            checked
+          >
+
+          Product is active
+        </label>
+
+        <div class="modal-actions">
+
+          <button
+            type="button"
+            class="secondary-button"
+            id="cancel-create-product"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            class="primary-button"
+          >
+            Create product
+          </button>
+
+        </div>
+
+      </form>
+
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  $("close-create-product").addEventListener("click", () => {
+    modal.remove();
+  });
+
+  $("cancel-create-product").addEventListener("click", () => {
+    modal.remove();
+  });
+
+  $("create-product-form").addEventListener("submit", createProduct);
 }
 
-if ($("catalog-add-button")) {
-  $("catalog-add-button").addEventListener(
-    "click",
-    createCatalogProduct
-  );
-}
 /* =========================================
-   IMPORT PRODUCTS FROM JSON OR CSV
+   CREATE PRODUCT
 ========================================= */
 
-function parseCatalogCSV(text) {
-  const lines = text
-    .replace(/^\uFEFF/, "")
-    .split(/\r?\n/)
-    .filter(line => line.trim());
+async function createProduct(event) {
+  event.preventDefault();
 
-  if (lines.length < 2) {
-    throw new Error("The CSV file is empty.");
+  if (!isAdmin) return;
+
+  const name = $("new-product-name").value.trim();
+  const categoryValue = $("new-product-category").value;
+  const price = Number($("new-product-price").value);
+  const stackSize = Number($("new-product-stack").value);
+  const discount = Number($("new-product-discount").value);
+  const active = $("new-product-active").checked;
+
+  if (!name) {
+    showToast("Please enter a product name.", "error");
+    return;
   }
 
-  const separator = lines[0].includes(";") ? ";" : ",";
+  if (!Number.isFinite(price) || price < 0) {
+    showToast("Please enter a valid price.", "error");
+    return;
+  }
 
-  function parseLine(line) {
-    const result = [];
-    let value = "";
-    let insideQuotes = false;
+  if (
+    !Number.isInteger(stackSize) ||
+    stackSize < 1 ||
+    stackSize > 999999
+  ) {
+    showToast("Please enter a valid stack size.", "error");
+    return;
+  }
 
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
+  if (
+    !Number.isFinite(discount) ||
+    discount < 0 ||
+    discount > 99
+  ) {
+    showToast("Discount must be between 0 and 99.", "error");
+    return;
+  }
 
-      if (char === '"') {
-        if (insideQuotes && line[i + 1] === '"') {
-          value += '"';
-          i++;
-        } else {
-          insideQuotes = !insideQuotes;
-        }
-      } else if (char === separator && !insideQuotes) {
-        result.push(value.trim());
-        value = "";
-      } else {
-        value += char;
-      }
+  const button = event.submitter;
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Creating...";
+  }
+
+  const { data, error } = await supabaseClient
+    .from("products")
+    .insert({
+      name,
+      category: categoryValue,
+      price,
+      stack_size: stackSize,
+      discount_percent: discount,
+      is_active: active
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Product creation error:", error);
+
+    showToast(
+      `Could not create product: ${error.message}`,
+      "error"
+    );
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Create product";
     }
 
-    result.push(value.trim());
-
-    return result;
+    return;
   }
 
-  const headers = parseLine(lines[0]).map(header =>
-    header.trim().toLowerCase()
-  );
+  $("product-create-modal")?.remove();
 
-  return lines.slice(1).map(line => {
-    const values = parseLine(line);
-    const product = {};
+  showToast("Product created successfully.");
 
-    headers.forEach((header, index) => {
-      product[header] = values[index] || "";
-    });
-
-    return product;
-  });
+  await Promise.all([
+    loadProducts(),
+    loadCatalogProducts()
+  ]);
 }
 
-function normalizeImportedProduct(raw) {
-  const name = String(
-    raw.name || raw.title || raw.item || ""
-  ).trim();
+/* =========================================
+   PRODUCT IMPORT
+========================================= */
 
-  if (!name) return null;
+function openProductImport() {
+  if (!isAdmin) return;
+
+  const existingModal = $("product-import-modal");
+
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  const modal = document.createElement("div");
+
+  modal.id = "product-import-modal";
+  modal.className = "modal-overlay";
+
+  modal.innerHTML = `
+    <div class="modal-content import-modal">
+
+      <div class="modal-header">
+        <h2>Import products</h2>
+
+        <button
+          type="button"
+          class="modal-close"
+          id="close-product-import"
+        >
+          ×
+        </button>
+      </div>
+
+      <p>
+        Import multiple products using a JSON file.
+      </p>
+
+      <p class="muted">
+        Required fields: name, category and price.
+        Optional fields: stack_size, discount_percent and is_active.
+      </p>
+
+      <textarea
+        id="product-import-json"
+        rows="12"
+        placeholder='[
+  {
+    "name": "Diamond",
+    "category": "Items",
+    "price": 30,
+    "stack_size": 64,
+    "discount_percent": 0,
+    "is_active": true
+  }
+]'
+      ></textarea>
+
+      <div class="modal-actions">
+
+        <button
+          type="button"
+          class="secondary-button"
+          id="cancel-product-import"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          class="primary-button"
+          id="confirm-product-import"
+        >
+          Import products
+        </button>
+
+      </div>
+
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  $("close-product-import").addEventListener("click", () => {
+    modal.remove();
+  });
+
+  $("cancel-product-import").addEventListener("click", () => {
+    modal.remove();
+  });
+
+  $("confirm-product-import").addEventListener("click", importProducts);
+}
+
+/* =========================================
+   IMPORT PRODUCTS
+========================================= */
+
+async function importProducts() {
+  if (!isAdmin) return;
+
+  const input = $("product-import-json");
+  const button = $("confirm-product-import");
+
+  let importedProducts;
+
+  try {
+    importedProducts = JSON.parse(input.value);
+  } catch (error) {
+    showToast("Invalid JSON format.", "error");
+    return;
+  }
+
+  if (
+    !Array.isArray(importedProducts) ||
+    importedProducts.length === 0
+  ) {
+    showToast("Please provide a non-empty product list.", "error");
+    return;
+  }
 
   const validCategories = [
     "Blocks",
     "Items",
     "Redstone",
     "Armor & Weapons",
-    "Enchantments"
+    "Enchantments",
+    "Services"
   ];
 
-  const requestedCategory = String(
-    raw.category || "Items"
-  ).trim();
+  const cleanedProducts = [];
 
-  const normalizedCategory = validCategories.includes(requestedCategory)
-    ? requestedCategory
-    : "Items";
+  for (const product of importedProducts) {
+    const name = String(product.name || "").trim();
+    const categoryValue = String(product.category || "").trim();
+    const price = Number(product.price);
 
-  const stackSize = Number(
-    raw.stack_size || raw.stackSize || 64
-  );
-
-  return {
-    name,
-    category: normalizedCategory,
-    description: String(raw.description || ""),
-    price: 0,
-    stack_size: [1, 16, 64].includes(stackSize)
-      ? stackSize
-      : 64,
-    discount_percent: 0,
-    is_active: false
-  };
-}
-
-async function importCatalogFile(file) {
-  if (!isAdmin || !file) return;
-
-  try {
-    const text = await file.text();
-
-    let imported;
-
-    if (file.name.toLowerCase().endsWith(".json")) {
-      imported = JSON.parse(text);
-    } else if (file.name.toLowerCase().endsWith(".csv")) {
-      imported = parseCatalogCSV(text);
-    } else {
-      throw new Error("Please select a JSON or CSV file.");
-    }
-
-    if (!Array.isArray(imported)) {
-      throw new Error("The import file must contain a product array.");
-    }
-
-    const normalized = imported
-      .map(normalizeImportedProduct)
-      .filter(Boolean);
-
-    if (!normalized.length) {
-      throw new Error("No valid products were found.");
-    }
-
-    const uniqueProducts = [
-      ...new Map(
-        normalized.map(product => [
-          product.name.toLowerCase(),
-          product
-        ])
-      ).values()
-    ];
-
-    const confirmed = confirm(
-      `Import ${uniqueProducts.length} products?\n\n` +
-      "All imported products will be inactive and have no price."
-    );
-
-    if (!confirmed) return;
-
-    const { data: existing, error: lookupError } =
-      await supabaseClient
-        .from("products")
-        .select("name");
-
-    if (lookupError) throw lookupError;
-
-    const existingNames = new Set(
-      (existing || []).map(product =>
-        String(product.name).toLowerCase()
-      )
-    );
-
-    const newProducts = uniqueProducts.filter(product =>
-      !existingNames.has(product.name.toLowerCase())
-    );
-
-    if (!newProducts.length) {
-      showToast("All products already exist.", "error");
+    if (!name || !validCategories.includes(categoryValue)) {
+      showToast(
+        "Every product needs a valid name and category.",
+        "error"
+      );
       return;
     }
 
-    const { error } = await supabaseClient
-      .from("products")
-      .insert(newProducts);
+    if (!Number.isFinite(price) || price < 0) {
+      showToast(
+        `Invalid price for product: ${name}`,
+        "error"
+      );
+      return;
+    }
 
-    if (error) throw error;
+    const stackSize = Number(product.stack_size ?? 64);
+    const discount = Number(product.discount_percent ?? 0);
 
-    showToast(`${newProducts.length} products imported.`);
+    if (
+      !Number.isInteger(stackSize) ||
+      stackSize < 1 ||
+      stackSize > 999999
+    ) {
+      showToast(
+        `Invalid stack size for product: ${name}`,
+        "error"
+      );
+      return;
+    }
 
-    await loadCatalogProducts();
-    await loadProducts();
+    if (
+      !Number.isFinite(discount) ||
+      discount < 0 ||
+      discount > 99
+    ) {
+      showToast(
+        `Invalid discount for product: ${name}`,
+        "error"
+      );
+      return;
+    }
 
-  } catch (error) {
-    console.error("Import error:", error);
+    cleanedProducts.push({
+      name,
+      category: categoryValue,
+      price,
+      stack_size: stackSize,
+      discount_percent: discount,
+      is_active: product.is_active !== false
+    });
+  }
+
+  button.disabled = true;
+  button.textContent = "Importing...";
+
+  const { error } = await supabaseClient
+    .from("products")
+    .insert(cleanedProducts);
+
+  if (error) {
+    console.error("Product import error:", error);
 
     showToast(
       `Import failed: ${error.message}`,
       "error"
     );
+
+    button.disabled = false;
+    button.textContent = "Import products";
+
+    return;
   }
+
+  $("product-import-modal")?.remove();
+
+  showToast(
+    `${cleanedProducts.length} products imported successfully.`
+  );
+
+  await Promise.all([
+    loadProducts(),
+    loadCatalogProducts()
+  ]);
 }
 
-if ($("catalog-import-file")) {
-  $("catalog-import-file").addEventListener(
-    "change",
-    event => {
-      const file = event.target.files?.[0];
+/* =========================================
+   ADMIN IMPORT BUTTON
+========================================= */
 
-      if (file) {
-        importCatalogFile(file);
-      }
-
-      event.target.value = "";
-    }
+if ($("import-products-button")) {
+  $("import-products-button").addEventListener(
+    "click",
+    openProductImport
   );
 }
 
 /* =========================================
-   INITIALIZE SHOP
+   REFRESH BUTTONS
 ========================================= */
 
-async function initializeShop() {
-  try {
-    // Set the default category before asynchronous loading.
-    showCategory("All");
+if ($("refresh-orders")) {
+  $("refresh-orders").addEventListener("click", loadOrders);
+}
 
+if ($("refresh-requests")) {
+  $("refresh-requests").addEventListener("click", loadRequests);
+}
+
+if ($("refresh-products")) {
+  $("refresh-products").addEventListener(
+    "click",
+    loadCatalogProducts
+  );
+}
+
+/* =========================================
+   MAIN NAVIGATION
+========================================= */
+
+function showMainSection(sectionName) {
+  const sections = {
+    offers: $("offers"),
+    shop: $("shop"),
+    account: $("account-section"),
+    admin: $("admin-section")
+  };
+
+  Object.entries(sections).forEach(([name, element]) => {
+    if (!element) return;
+
+    element.style.display =
+      name === sectionName ? "" : "none";
+  });
+
+  if (sectionName === "offers") {
+    renderOffers();
+  }
+
+  if (sectionName === "shop") {
+    loadProducts();
+  }
+
+  if (sectionName === "account") {
+    updateAccountUI();
+  }
+
+  if (sectionName === "admin") {
+    openAdmin();
+  }
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+}
+
+document.querySelectorAll("[data-main-section]").forEach(button => {
+  button.addEventListener("click", () => {
+    showMainSection(button.dataset.mainSection);
+  });
+});
+
+/* =========================================
+   APPLICATION INITIALIZATION
+========================================= */
+
+async function initializeApp() {
+  console.log("Brat Ltd. shop initializing...");
+
+  try {
     await loadSession();
 
     await loadProducts();
 
-    renderCart();
+    renderOffers();
 
-    // Important:
-    // Do not call showCategory("All") here.
-    // Otherwise a category selected by the user
-    // during loading could be overwritten.
-
-    if (currentSession && isAdmin) {
-      await loadRequests();
-      await loadCatalogProducts();
-    }
+    updateAccountUI();
 
     console.log("Brat Ltd. shop initialized.");
-
   } catch (error) {
-    console.error("Shop initialization failed:", error);
+    console.error("Application initialization error:", error);
 
     showToast(
-      "The shop could not be initialized.",
+      "The shop could not be fully initialized. Please reload the page.",
       "error"
     );
   }
@@ -2870,9 +3677,8 @@ async function initializeShop() {
 if (document.readyState === "loading") {
   document.addEventListener(
     "DOMContentLoaded",
-    initializeShop,
-    { once: true }
+    initializeApp
   );
 } else {
-  initializeShop();
+  initializeApp();
 }
