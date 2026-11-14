@@ -2239,15 +2239,27 @@ async function loginUser(event) {
   const email = $("login-email").value.trim();
   const password = $("login-password").value;
 
-  const button = $("login-submit");
+  // Submit-Button zuverlässig finden
+  const button =
+    event.submitter ||
+    event.currentTarget.querySelector(
+      'button[type="submit"], input[type="submit"]'
+    ) ||
+    $("login-submit");
 
   if (!email || !password) {
     showToast("Enter your email and password.", "error");
     return;
   }
 
-  button.disabled = true;
-  button.textContent = "Signing in...";
+  // Button nur deaktivieren, wenn er gefunden wurde
+  if (button) {
+    button.disabled = true;
+
+    if (button.tagName === "BUTTON") {
+      button.textContent = "Signing in...";
+    }
+  }
 
   try {
     const { data, error } = await supabaseClient.auth
@@ -2280,13 +2292,14 @@ async function loginUser(event) {
     );
 
   } finally {
-    button.disabled = false;
-    button.textContent = "Sign in";
-  }
-}
+    if (button) {
+      button.disabled = false;
 
-if ($("login-form")) {
-  $("login-form").addEventListener("submit", loginUser);
+      if (button.tagName === "BUTTON") {
+        button.textContent = "Sign in";
+      }
+    }
+  }
 }
 
 /* =========================================
