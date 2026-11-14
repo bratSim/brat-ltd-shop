@@ -2135,39 +2135,39 @@ async function updateAuthState() {
    ACCOUNT UI
 ========================================= */
 
+
 function updateAccountUI() {
   const accountButton = $("account-button");
   const loginButton = $("login-button");
   const logoutButton = $("logout-button");
   const adminButton = $("admin-button");
 
+  // Login button
+  if (loginButton) {
+    loginButton.hidden = Boolean(currentSession);
+  }
+
+  // Account button
   if (accountButton) {
+    accountButton.hidden = !currentSession;
     accountButton.textContent = currentSession
-      ? currentSession.user.email
+      ? "Account"
       : "Account";
   }
 
-  if (loginButton) {
-    loginButton.style.display =
-      currentSession ? "none" : "";
-  }
-
+  // Logout button
   if (logoutButton) {
-    logoutButton.style.display =
-      currentSession ? "" : "none";
+    logoutButton.hidden = !currentSession;
   }
 
+  // Admin dashboard button
   if (adminButton) {
-    adminButton.style.display =
-      isAdmin ? "" : "none";
+    adminButton.hidden = !isAdmin;
   }
 
-  const adminNavigation = document.querySelectorAll(
-    "[data-admin-only]"
-  );
-
-  adminNavigation.forEach(element => {
-    element.style.display = isAdmin ? "" : "none";
+  // Admin-only navigation elements
+  document.querySelectorAll("[data-admin-only]").forEach(element => {
+    element.hidden = !isAdmin;
   });
 }
 
