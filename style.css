@@ -2004,3 +2004,187 @@ textarea:focus-visible {
     transition-duration: .01ms !important;
   }
 }
+
+/* =========================================
+   BRAT LTD. — PRODUCT CARD FIX
+========================================= */
+
+.product-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Image area */
+.product-visual {
+  position: relative;
+  min-height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+
+  background:
+    radial-gradient(circle, rgba(255,255,255,.055), transparent 70%),
+    #191714;
+}
+
+.product-visual > img.product-image {
+  display: block;
+  width: 100%;
+  max-width: 150px;
+  height: 145px;
+  min-height: 0;
+  padding: 0;
+
+  object-fit: contain;
+  image-rendering: pixelated;
+
+  background: transparent;
+}
+
+.product-visual .fallback-icon {
+  width: 100%;
+  min-height: 145px;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+}
+
+/* Admin buttons */
+.product-admin-actions {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  z-index: 5;
+}
+
+.product-admin-actions button {
+  padding: 7px 10px;
+
+  border: 1px solid var(--border);
+  border-radius: 7px;
+
+  background: #292622;
+  color: var(--text);
+
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.product-admin-actions .product-admin-menu:hover {
+  background: rgba(242,140,40,.15);
+  border-color: var(--orange);
+}
+
+.product-admin-actions .product-delete-button {
+  color: #ff7777;
+}
+
+.product-admin-actions .product-delete-button:hover {
+  background: rgba(255,80,80,.12);
+  border-color: #ff7777;
+}
+
+/* Product information */
+.product-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 17px;
+}
+
+.product-tag {
+  margin-bottom: 5px;
+
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+}
+
+.product-info h3 {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.product-description {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.price-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+
+  margin-top: auto;
+  padding-top: 15px;
+}
+
+.price-row .price {
+  color: var(--orange-light);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.price-row .old-price {
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: line-through;
+}
+
+.price-row .product-discount-badge {
+  padding: 4px 7px;
+  border-radius: 5px;
+
+  background: rgba(242,140,40,.15);
+  color: var(--orange);
+
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.stack-info {
+  margin-top: 7px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.product-card .add-button {
+  width: 100%;
+  margin-top: 15px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .product-visual {
+    min-height: 145px;
+    padding: 12px;
+  }
+
+  .product-visual > img.product-image {
+    height: 115px;
+  }
+
+  .product-admin-actions {
+    right: 6px;
+    bottom: 6px;
+  }
+}
