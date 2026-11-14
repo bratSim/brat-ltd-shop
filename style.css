@@ -2777,3 +2777,111 @@ textarea:focus-visible {
   padding-top: 18px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
+
+/* =========================================
+   CART ITEM DESIGN — MATCH APP.JS
+========================================= */
+
+#cart-panel .cart-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 17px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+#cart-panel .cart-item-details {
+  flex: 1;
+  min-width: 0;
+}
+
+#cart-panel .cart-item-details h3 {
+  margin: 0 0 7px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+#cart-panel .cart-item-price {
+  margin-bottom: 9px;
+  color: var(--orange-light);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#cart-panel .quantity-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+#cart-panel .quantity-controls button {
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+
+  background: var(--surface-light);
+  color: var(--text);
+
+  border: 1px solid var(--border);
+  border-radius: 7px;
+
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#cart-panel .quantity-controls button:hover {
+  background: rgba(242, 140, 40, 0.15);
+  border-color: var(--orange);
+}
+
+#cart-panel .quantity-controls span {
+  min-width: 20px;
+  text-align: center;
+  color: var(--text);
+  font-weight: 700;
+}
+
+#cart-panel .remove-cart-item {
+  padding: 5px 9px;
+
+  background: transparent;
+  color: #e58b68;
+
+  border: 1px solid rgba(229, 139, 104, 0.3);
+  border-radius: 6px;
+
+  font-size: 11px;
+  cursor: pointer;
+}
+
+#cart-panel .remove-cart-item:hover {
+  background: rgba(229, 139, 104, 0.12);
+  border-color: #e58b68;
+}
+
+#cart-panel .cart-total {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+#cart-panel .total-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+
+#cart-panel .total-line:last-child {
+  color: var(--orange-light);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+#cart-panel .discount-line {
+  color: #75bd83;
+}
