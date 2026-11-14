@@ -2337,3 +2337,361 @@ textarea:focus-visible {
     height: 95px;
   }
 }
+/* =========================================
+   BRAT LTD. — CLEAN PRODUCT LIST
+   No product images, horizontal product rows
+========================================= */
+
+/* Product list */
+.products-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+
+  width: 100%;
+}
+
+/* Individual product row */
+.product-card {
+  display: block;
+  width: 100%;
+  min-width: 0;
+
+  overflow: visible;
+
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+
+  transition: background .2s ease;
+}
+
+.product-card:hover {
+  transform: none;
+  background: rgba(255,255,255,.025);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* Hide all product image areas */
+.product-visual,
+.product-image,
+.product-card-image,
+.product-image-fallback,
+.fallback-icon {
+  display: none !important;
+}
+
+/* Product information layout */
+.product-info {
+  display: grid;
+
+  grid-template-columns: minmax(0, 1fr) 170px 155px;
+  align-items: center;
+  gap: 25px;
+
+  width: 100%;
+  min-height: 105px;
+
+  padding: 17px 20px;
+}
+
+/* Main product information */
+.product-main-info {
+  min-width: 0;
+}
+
+.product-tag {
+  margin-bottom: 3px;
+
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+}
+
+.product-name {
+  margin: 0;
+
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.product-description {
+  margin: 4px 0 0;
+
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.stack-info {
+  margin-top: 5px;
+
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* Price */
+.product-price-area {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.product-price-area .price-row {
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+}
+
+.price-row .price {
+  color: var(--orange-light);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.price-row .old-price {
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: line-through;
+}
+
+/* Actions */
+.product-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+}
+
+.product-actions .add-button {
+  width: 100%;
+  min-height: 38px;
+  margin: 0;
+}
+
+/* Admin actions */
+.product-actions .product-admin-actions {
+  position: static;
+
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.product-actions .product-admin-actions button {
+  flex: 1;
+}
+
+/* =========================================
+   OFFERS — CLEAN LIST
+========================================= */
+
+.offers-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.offer-card {
+  display: block;
+
+  width: 100%;
+  min-height: 0;
+
+  padding: 18px 20px;
+
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+
+  transition: background .2s ease;
+}
+
+.offer-card:hover {
+  transform: none;
+  background: rgba(255,255,255,.025);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* Hide offer images */
+.offer-image,
+.offer-product-image {
+  display: none !important;
+}
+
+.offer-copy {
+  display: grid;
+
+  grid-template-columns: minmax(0, 1fr) auto 150px;
+  align-items: center;
+  gap: 15px 25px;
+
+  width: 100%;
+  height: auto;
+}
+
+.offer-kicker {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.offer-copy h3 {
+  grid-column: 1;
+  grid-row: 2;
+
+  margin: 0;
+}
+
+.offer-copy p {
+  grid-column: 1;
+  grid-row: 3;
+
+  margin: 0;
+}
+
+.offer-details {
+  grid-column: 2;
+  grid-row: 1 / 4;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.offer-prices {
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+}
+
+.offer-prices .offer-price {
+  color: var(--orange-light);
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.offer-add-button {
+  grid-column: 3;
+  grid-row: 1 / 4;
+
+  width: 100%;
+  margin: 0;
+}
+
+/* =========================================
+   RESPONSIVE PRODUCT LIST
+========================================= */
+
+@media (max-width: 750px) {
+  .product-info {
+    grid-template-columns: minmax(0, 1fr) 120px;
+    gap: 12px;
+    padding: 15px 12px;
+  }
+
+  .product-main-info {
+    grid-column: 1;
+  }
+
+  .product-price-area {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .product-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .product-actions .add-button {
+    width: auto;
+    min-width: 130px;
+  }
+
+  .product-actions .product-admin-actions {
+    flex: 1;
+  }
+
+  .offer-copy {
+    grid-template-columns: minmax(0, 1fr) 120px;
+    gap: 10px 15px;
+  }
+
+  .offer-kicker,
+  .offer-copy h3,
+  .offer-copy p {
+    grid-column: 1;
+  }
+
+  .offer-details {
+    grid-column: 2;
+    grid-row: 1 / 4;
+  }
+
+  .offer-add-button {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 450px) {
+  .product-info {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .product-price-area {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+
+  .product-price-area .price-row {
+    justify-content: flex-start;
+  }
+
+  .product-actions {
+    grid-column: 1;
+    flex-wrap: wrap;
+  }
+
+  .product-actions .add-button {
+    flex: 1;
+    width: 100%;
+  }
+
+  .product-actions .product-admin-actions {
+    width: 100%;
+  }
+
+  .offer-copy {
+    grid-template-columns: 1fr;
+  }
+
+  .offer-kicker,
+  .offer-copy h3,
+  .offer-copy p,
+  .offer-details,
+  .offer-add-button {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .offer-details {
+    align-items: flex-start;
+  }
+
+  .offer-prices {
+    justify-content: flex-start;
+  }
+}
