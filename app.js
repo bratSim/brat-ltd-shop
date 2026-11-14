@@ -876,15 +876,9 @@ function renderOffers() {
 
     return `
       <article class="offer-card">
-        <div class="offer-image">
-          <span class="offer-badge">
-            -${getManualDiscount(product)}%
-          </span>
-
-          ${imageMarkup(product, "offer-product-image")}
-        </div>
 
         <div class="offer-copy">
+
           <div class="offer-kicker">
             ${escapeHTML(product.category)}
           </div>
@@ -897,9 +891,26 @@ function renderOffers() {
             )}
           </p>
 
-          <div class="offer-prices">
-            <span class="old-price">${money(oldPrice)}</span>
-            <span class="offer-price">${money(newPrice)}</span>
+          <div class="offer-details">
+
+            <div class="offer-prices">
+              <span class="old-price">
+                ${money(oldPrice)}
+              </span>
+
+              <span class="offer-price">
+                ${money(newPrice)}
+              </span>
+
+              <span class="product-discount-badge">
+                -${getManualDiscount(product)}%
+              </span>
+            </div>
+
+            <span class="stack-info">
+              ${stackText(product)}
+            </span>
+
           </div>
 
           <button
@@ -907,9 +918,11 @@ function renderOffers() {
             data-add="${escapeHTML(product.id)}"
             type="button"
           >
-            Add to cart →
+            Add to cart
           </button>
+
         </div>
+
       </article>
     `;
   }).join("");
@@ -1019,38 +1032,53 @@ function renderProducts() {
 
   container.innerHTML = filtered.map(product => `
     <article class="product-card">
-      <div class="product-visual">
-        ${imageMarkup(product)}
-        ${adminProductButton(product)}
-      </div>
 
       <div class="product-info">
-        <div class="product-tag">
-          ${escapeHTML(product.category)}
+
+        <div class="product-main-info">
+
+          <div class="product-tag">
+            ${escapeHTML(product.category)}
+          </div>
+
+          <h3 class="product-name">
+            ${escapeHTML(product.name)}
+          </h3>
+
+          <p class="product-description">
+            ${escapeHTML(product.description || "")}
+          </p>
+
+          <div class="stack-info">
+            ${stackText(product)}
+          </div>
+
         </div>
 
-        <h3>${escapeHTML(product.name)}</h3>
+        <div class="product-price-area">
 
-        <p class="product-description">
-          ${escapeHTML(product.description || "")}
-        </p>
+          <div class="price-row">
+            ${productPriceMarkup(product)}
+          </div>
 
-        <div class="price-row">
-          ${productPriceMarkup(product)}
         </div>
 
-        <div class="stack-info">
-          ${stackText(product)}
+        <div class="product-actions">
+
+          <button
+            class="primary-button add-button"
+            data-add="${escapeHTML(product.id)}"
+            type="button"
+          >
+            Add to cart
+          </button>
+
+          ${adminProductButton(product)}
+
         </div>
 
-        <button
-          class="primary-button add-button"
-          data-add="${escapeHTML(product.id)}"
-          type="button"
-        >
-          Add to cart
-        </button>
       </div>
+
     </article>
   `).join("");
 
