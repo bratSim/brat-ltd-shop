@@ -2188,3 +2188,152 @@ textarea:focus-visible {
     bottom: 6px;
   }
 }
+
+/* =========================================
+   BRAT LTD. — FEATURED OFFERS FIX
+========================================= */
+
+.offers-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 19px;
+  align-items: stretch;
+}
+
+.offer-card {
+  display: grid;
+  grid-template-columns: 115px minmax(0, 1fr);
+  align-items: center;
+  gap: 19px;
+
+  min-height: 190px;
+  padding: 20px;
+
+  overflow: hidden;
+}
+
+.offer-image {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 115px;
+  min-height: 145px;
+  padding: 12px;
+
+  background: rgba(0, 0, 0, .16);
+  border: 1px solid rgba(255,255,255,.04);
+  border-radius: 10px;
+}
+
+.offer-product-image {
+  display: block;
+
+  width: 100%;
+  height: 115px;
+
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+.offer-image .fallback-icon {
+  min-height: 115px;
+  font-size: 25px;
+}
+
+.offer-badge {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 2;
+}
+
+.offer-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  height: 100%;
+}
+
+.offer-kicker {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+}
+
+.offer-copy h3 {
+  margin: 9px 0 7px;
+  overflow-wrap: anywhere;
+}
+
+.offer-copy p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.offer-prices {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.offer-prices .old-price {
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: line-through;
+}
+
+.offer-prices .offer-price {
+  color: var(--orange-light);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.offer-add-button {
+  width: 100%;
+  margin-top: 12px;
+}
+
+/* Tablet */
+@media (max-width: 1100px) {
+  .offer-card {
+    grid-template-columns: 90px minmax(0, 1fr);
+    gap: 12px;
+    padding: 15px;
+  }
+
+  .offer-image {
+    width: 90px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .offers-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .offer-card {
+    grid-template-columns: 90px minmax(0, 1fr);
+    min-height: 160px;
+    padding: 14px;
+  }
+
+  .offer-image {
+    width: 90px;
+    min-height: 120px;
+  }
+
+  .offer-product-image {
+    height: 95px;
+  }
+}
