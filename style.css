@@ -2923,3 +2923,53 @@ textarea:focus-visible {
 .admin-floating-button[hidden] {
   display: none !important;
 }
+
+/* =========================================
+   BRAT LTD. — REMOVE ALL PRODUCT IMAGES
+========================================= */
+
+/* Hide all actual images throughout the shop */
+img,
+picture,
+picture img {
+  display: none !important;
+}
+
+/* Product images */
+.product-image,
+.product-card-image,
+.product-image-fallback {
+  display: none !important;
+}
+
+/* Featured offer images */
+.offer-image,
+.offer-product-image,
+.offer-visual {
+  display: none !important;
+}
+
+/* Cart images */
+.cart-item-image,
+.cart-product-image {
+  display: none !important;
+}
+
+/* Keep cart products compact without images */
+#cart-panel .cart-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0 !important;
+  padding: 18px 0;
+}
+
+/* Remove empty image space */
+#cart-panel .cart-item-details {
+  flex: 1;
+  width: 100%;
+}
+
+/* No image previews in color selection */
+.color-option img {
+  display: none !important;
+}
